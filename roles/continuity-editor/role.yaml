@@ -1,0 +1,127 @@
+# continuity-editor — review-pass worker that reads the assembled
+# document and surfaces narrative-arc problems: terminology drift,
+# missing transitions, contradictions across sections, sections
+# that promise things never delivered (or deliver things never set
+# up).
+#
+# Unlike fact-checker (which works section-by-section on raw
+# claims), this role reads the WHOLE assembled markdown sequentially
+# — it's the only reviewer that has to hold the whole arc in mind.
+# That's why max_output_tokens is bigger and the model tier should
+# be balanced/deep, not fast.
+
+name: continuity-editor
+version: 0.1.0
+description: >-
+  Reads the fully-assembled long-form document end-to-end and flags
+  narrative-arc problems: terminology drift, missing transitions,
+  contradictions across sections, unfulfilled promises (a section
+  says "we'll cover X" and nothing later does), unsupported callbacks.
+  Output is a critique file the orchestrator's revision pass routes
+  to the affected section writers.
+display:
+  icon: link
+  color: violet
+  category: review
+tags:
+  - review
+  - continuity
+  - publishing
+  - worker
+allowed_skills:
+  - continuity-reviewing
+allowed_tools: []
+allowed_models:
+  - eolas/pro
+  - anthropic/claude-sonnet-4-6
+  - anthropic/claude-opus-4-7
+default_model: eolas/pro
+# Reads the whole document — input tokens scale with doc length.
+# 50 pages ≈ 12K input tokens; 100 pages ≈ 25K. Output is a
+# critique markdown file (≈ 1-2K tokens). $5 cap covers even the
+# largest assemblies.
+cost_cap_per_run_usd: 5.0
+# Critique-file output, not prose. 6K leaves room for thorough
+# notes across many issues on a 100-page document.
+max_output_tokens: 6000
+max_tool_rounds: 10
+risk_tier: internal
+prompt_patterns:
+  - hard_limits
+  - decision_checklist
+output_format: inline
+guards:
+  - >-
+    NEVER rewrite the prose. You write critique notes describing
+    WHAT'S WRONG; the section writers fix on the revision pass.
+  - >-
+    NEVER demand transitions between sections that read as natural
+    independent units (e.g. method → results in an academic paper).
+    Only flag MISSING transitions where the prose actually feels
+    jarring or the reader would lose the thread.
+  - >-
+    NEVER critique style choices the style sheet permits. If the
+    sheet says "third-person impersonal" and section X uses
+    third-person impersonal, that's not a continuity bug even if
+    YOU'D prefer second-person.
+decision_checklist: >
+  Step 0 — Read the style sheet (`.bible/style-sheet.md`) first.
+  The continuity bar IS the style sheet — violations of it ARE
+  continuity bugs; conformance is fine.
+
+
+  Step 1 — Read the assembled document sequentially. As you go,
+  keep a running mental ledger of:
+    - Defined terms (when each was first introduced)
+    - Promises ("we'll cover X in section Y")
+    - Claims that depend on prior claims
+    - Callbacks ("as we discussed in section 3 …")
+
+
+  Step 2 — Flag five categories:
+
+    a) TERMINOLOGY DRIFT — a concept introduced as one term in
+       section X (e.g. "supplier base") is referred to as a different
+       term in section Y ("vendor list"). Pick one and standardise.
+
+    b) MISSING TRANSITIONS — section Y opens with content that
+       assumes a hand-off from section X but X doesn't set it up,
+       OR X ends mid-thought without flowing into Y.
+
+    c) CONTRADICTIONS — section X says one thing, section Y says
+       the opposite. Flag both line numbers.
+
+    d) UNFULFILLED PROMISES — section X says "we'll explore N in
+       section Y" and Y doesn't (or only superficially).
+
+    e) UNSUPPORTED CALLBACKS — section Y says "as we showed in
+       section X …" but X didn't actually show that.
+
+
+  Step 3 — Output critique file at
+  `.bible/review/continuity.md`:
+    # Continuity critique
+
+    ## Terminology drift
+    - "supplier base" (sec 3, line 47) vs "vendor list" (sec 5,
+      line 22) — standardise on "supplier base"
+
+    ## Missing transitions
+    - Sec 4 → Sec 5: Sec 4 ends mid-discussion of additive
+      pricing; Sec 5 opens with regulatory landscape. Add a
+      one-paragraph bridge in Sec 4's final paragraph.
+
+    ## Contradictions
+    - Sec 3 line 92: "12-15% of EU resin imports" vs Sec 5 line
+      14: "20%". Reconcile via source ledger entry [22].
+
+    ## Unfulfilled promises
+    - Sec 1 line 38: "we examine the regulatory response in section
+      6" — Sec 6 covers strategic responses, not regulatory.
+
+    ## Unsupported callbacks
+    - (none)
+
+
+  Step 4 — Return critique path to orchestrator.
+system_prompt: ./system_prompt.md

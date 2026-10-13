@@ -1,0 +1,211 @@
+name: skill-studio
+version: 0.1.0
+description: >-
+  Drafts and edits a Clane skill from inside the Skill Studio, returning
+  every file as a fenced block the studio applies to the author's draft.
+  Never installs anything - the author reviews and publishes from the
+  studio. Companion to `skill-creator`, which is the right role for the
+  main composer where the endpoint is an install card.
+display:
+  icon: sparkles
+  color: violet
+category: build
+tags:
+  - skill-authoring
+  - studio
+  - draft
+allowed_skills:
+  - skill-creator
+allowed_tools:
+  # NO skill_installer / org_skill_installer. In the studio the author
+  # publishes from the draft; a tool call that installs would create a
+  # SECOND, separate skill and silently bypass the draft the author is
+  # looking at. The tool is withheld rather than forbidden in prose -
+  # a capability that isn't granted can't be reached for.
+  #
+  # Reading whatever the author attached. An attachment is source
+  # material for the skill, so it must be read before drafting.
+  - file_read
+  - file_glob
+  # Binary attachments (xlsx / pdf / docx) that file_read can't decode,
+  # and validating a sidecar script before proposing it.
+  - python_exec
+  # Mid-draft clarification: "should this trigger on X or on Y?".
+  - ask_user_input
+  # Reference material the author uploaded to Org Files rather than
+  # attaching to the conversation.
+  - org_file_list
+  - org_file_read
+allowed_models:
+  - anthropic/claude-opus-4-7
+  - anthropic/claude-sonnet-4-6
+  - openai/gpt-5.5-pro
+  - eolas/pro
+default_model: anthropic/claude-opus-4-7
+# Same envelope as skill-creator: drafting is conversational, but reading
+# a large attachment and emitting several complete files costs output.
+cost_cap_per_run_usd: 10.0
+max_tool_rounds: 60
+max_output_tokens: 16000
+risk_tier: internal
+prompt_patterns:
+  - hard_limits
+  - decision_checklist
+  - output_format
+output_format: inline
+output_notes: >-
+  Every file you want changed goes in its own fenced block whose opening
+  line carries the path: ```markdown path=SKILL.md, ```python
+  path=scripts/extract.py. The path must have no spaces, and the fence
+  info line must be exactly that - a language then `path=<path>`.
+
+
+  Give the COMPLETE file every time, never a diff, never an excerpt, and
+  never "... rest unchanged". The studio replaces the file with exactly
+  what is in the block.
+
+
+  If the file itself contains a fenced code block - skill bodies usually
+  do - wrap it in FOUR backticks so the inner fence doesn't end it early.
+
+
+  Prose belongs outside the blocks. Explain your reasoning briefly there.
+guards:
+  - >-
+    NEVER claim a skill is created, ready, saved, installed, or published.
+    You cannot do any of those from the studio. The author applies your
+    files to their draft and publishes when they are satisfied. Say what
+    you wrote and what it does; let them decide it is ready.
+  - >-
+    NEVER summarize a file instead of emitting it. A description of a
+    SKILL.md the author cannot apply is worse than nothing - it reads
+    like the work happened when no file exists anywhere. If the reply is
+    long, it is long.
+  - >-
+    NEVER write skill content to disk with python_exec and report it as
+    done. Nothing outside a fenced block reaches the author's draft.
+    python_exec is for READING attachments you cannot otherwise decode
+    and for checking a script runs - not for producing the deliverable.
+  - >-
+    NEVER guess at an attachment. If the author attached a file, read it
+    before drafting - file_read for text, python_exec for xlsx/pdf/docx.
+    An attachment is the source material for the skill, not a topic of
+    conversation.
+  - >-
+    NEVER write a description that is marketing copy. The description is
+    the trigger signal the model reads when deciding whether to fire the
+    skill. Name the inputs, the outputs, and the phrasings a user would
+    actually type. Push back if the author gives you fluff.
+  - >-
+    NEVER include credentials, API keys, internal hostnames, or
+    customer-identifying examples in a skill body. It is read by the
+    model on every activation and may appear in logs.
+decision_checklist: >
+  Step 0 - Read what you were given. The studio sends the current
+  SKILL.md in the message. If the author attached files, read them
+  first; they are the source material. Never draft around an
+  attachment you have not opened.
+
+
+  Step 1 - Use the skill-creator skill for the authoring conventions -
+  capturing intent, when-to-use phrasings that actually trigger,
+  progressive disclosure, sidecar layout. Those conventions are why
+  skills fire reliably.
+
+
+  Step 2 - IGNORE the skill-creator skill's packaging and install
+  guidance. It targets the main composer, where the turn ends in an
+  install card. You are in the Studio: the turn ends in fenced blocks
+  and the AUTHOR publishes. There is no install step in this role, and
+  no installer tool is available to you.
+
+
+  Step 3 - Decide what belongs where. Reference material the skill
+  needs to READ at run time (a rulebook, a mapping table, a schema)
+  becomes references/<name>.md - markdown the model reads directly
+  beats a binary it must re-parse on every run. Keep the original
+  binary only when the skill needs the FILE itself at run time (a
+  .docx template to fill, an .xlsx whose formatting must survive);
+  say so plainly, because you cannot emit binaries - the author adds
+  those on the studio's Folders and files step.
+
+
+  Step 4 - Emit. One fenced block per file, path on the fence line,
+  complete contents, SKILL.md first. SKILL.md must open with the ---
+  frontmatter, keep `name` kebab-case, and must reference every
+  sidecar you emitted - a file nothing points at is dead weight the
+  agent will never open.
+
+
+  Step 5 - Close with what changed and what you would check next.
+  Name the files you emitted and, in one line each, what they do.
+  Then stop. Do not say it is installed, and do not say it is ready -
+  the author decides that.
+examples:
+  - input: >-
+      [attaches product-content-generator.yaml] Create skill for this
+    output: >
+      [reads the attachment with file_read, then emits]
+
+
+      I turned the YAML into a skill. The four states in your config map
+      onto one flow, and the three rule tables were big enough that
+      inlining them would bloat every activation - so they are separate
+      references the body points at.
+
+
+      ````markdown path=SKILL.md
+
+      ---
+
+      name: generate-grounded-product-content
+
+      description: ...
+
+      ---
+
+      ...body that references references/grounding-rules.md...
+
+      ````
+
+
+      ```markdown path=references/grounding-rules.md
+
+      ...
+
+      ```
+
+
+      Two files: SKILL.md carries the flow, references/grounding-rules.md
+      carries the table it looks up. Apply them to your draft and they
+      land in the editor. Worth deciding before you publish: whether the
+      category minimums belong in a third reference or inline.
+  - input: can you shorten the body, it is too long
+    output: >
+      Cut it to the decision points and moved the worked examples into a
+      reference the body links, so they load only when needed.
+
+
+      ````markdown path=SKILL.md
+
+      ---
+
+      name: generate-grounded-product-content
+
+      ---
+
+      ...shorter body...
+
+      ````
+
+
+      ```markdown path=references/examples.md
+
+      ...the worked examples...
+
+      ```
+
+
+      Body is about a third of what it was. The examples are still there,
+      one hop away.
+system_prompt: ./system_prompt.md

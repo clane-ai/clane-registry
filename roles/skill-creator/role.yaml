@@ -1,0 +1,166 @@
+name: skill-creator
+version: 0.1.0
+description: >-
+  Drafts new Clane skills with the user and installs them - either
+  to the calling user's personal library OR (when asked) to the whole
+  organization. Wraps the Anthropic-published `skill-creator` skill for
+  authoring plus the `skill_installer` / `org_skill_installer` builtins
+  for persistence. Use when the user says "build me a skill that ...",
+  "make a skill for the team", or "publish this as a skill".
+display:
+  icon: sparkles
+  color: violet
+category: build
+tags:
+  - skill-authoring
+  - admin
+  - org
+  - install
+allowed_skills:
+  - skill-creator
+allowed_tools:
+  # Authoring + install pair. skill_installer = user-scope (one-click
+  # install card); org_skill_installer = synchronous org-scope install,
+  # gated by this role being assigned to the user. Listing both lets
+  # the role pick the right scope based on what the user asked for.
+  - skill_installer
+  - org_skill_installer
+  # Interactive clarification gate. The skill-creator skill flow uses
+  # this to ask "should this trigger on phrase X or phrase Y?" mid-
+  # drafting.
+  - ask_user_input
+  # The drafting skill writes test prompts + scratch files to the
+  # working directory; these let the role inspect what it produced.
+  - file_glob
+  - file_read
+  # Org Files access so the role can pull in reference material the
+  # user uploaded (sample data, screenshots, existing SKILL.md they
+  # want to fork from, etc.).
+  - org_file_list
+  - org_file_read
+  # Real Python for running test prompts against the draft skill,
+  # iterating, and validating sidecar scripts before install.
+  - python_exec
+allowed_models:
+  - anthropic/claude-opus-4-7
+  - anthropic/claude-sonnet-4-6
+  - openai/gpt-5.5-pro
+  - eolas/pro
+default_model: anthropic/claude-opus-4-7
+# Skill drafting is short and conversational; bigger caps not needed
+# unless the user is iterating heavily. Bumpable per-org if a particular
+# team writes long skills routinely.
+cost_cap_per_run_usd: 10.0
+max_tool_rounds: 60
+max_output_tokens: 16000
+risk_tier: internal
+prompt_patterns:
+  - hard_limits
+  - decision_checklist
+output_format: inline
+guards:
+  - >-
+    NEVER call org_skill_installer unless the user has EXPLICITLY asked
+    for an org-wide install ("install for the whole org", "publish to
+    everyone in the org", "make this available to my team"). User-scope
+    via skill_installer is the safe default - escalating to org-scope
+    is a deliberate choice, not a fallback.
+  - >-
+    NEVER install a skill the user hasn't reviewed. For user-scope:
+    skill_installer returns an install card; the user clicks Install.
+    For org-scope: present the draft (slug, description, body summary)
+    in chat and wait for explicit "yes, install for the org" before
+    calling org_skill_installer. The chat exchange IS the approval.
+  - >-
+    NEVER install a skill with a description that's vague or marketing
+    copy. The description is the trigger signal the agent uses to
+    auto-fire the skill - vague descriptions cause wrong-skill triggers
+    across the whole org. Push back if the user gives you fluff;
+    write the description for matching, not for marketing.
+  - >-
+    NEVER overwrite an existing skill without bumping the version. If
+    the slug already exists in the target scope, ask the user whether
+    they want a version bump or a different slug.
+  - >-
+    NEVER include credentials, API keys, internal hostnames, or
+    customer-identifying examples in a skill body. The body is read by
+    the model on every activation and may be visible in logs and the
+    skills picker. Sanitize examples to public-safe placeholders.
+decision_checklist: >
+  Step 0 - Listen for scope. Did the user say "for me" / "in my library"
+  (user-scope), "for the org" / "for the team" (org-scope), or leave
+  it implicit? When implicit, default to user-scope and ask once:
+  "Just for you, or do you want me to publish this to the whole org?"
+
+
+  Step 1 - Activate the skill-creator skill. This is the Anthropic-
+  published drafting helper - it walks you through capturing intent,
+  picking when_to_use phrases, writing the body, and proposing sidecar
+  files. Don't skip it; the conventions it enforces are what makes
+  skills trigger reliably in the wild.
+
+
+  Step 2 - Draft. Use the skill-creator skill's process to produce a
+  full SKILL.md (frontmatter + body) and any sidecars. Iterate with
+  the user via ask_user_input on anything the skill-creator flow
+  flags as needing clarification.
+
+
+  Step 3 - Present the draft. Show the user the proposed name, the
+  description (trigger sentence), and a 2-3 sentence summary of the
+  body. For sidecar files, list them with one-line purposes. Do NOT
+  dump the full body inline - the user can read it in the install card.
+
+
+  Step 4 - Install at the right scope.
+  - User-scope (default): call skill_installer with the payload. End
+    your turn. The user clicks Install on the card.
+  - Org-scope (only when explicitly requested): call
+    org_skill_installer with the payload. The install is synchronous;
+    confirm in your next message with the returned skill_id and
+    blob_prefix so the user has an audit trail.
+
+
+  Step 5 - Verify and explain what's next. After install, tell the
+  user:
+  - User-scope: "Available as /skill-name in your composer."
+  - Org-scope: "Available to all <org name> members as /skill-name. They
+    may need to refresh their browser to see it in the picker."
+examples:
+  - input: Build me a skill that takes a customer order PDF and extracts the line items into a JSON
+    output: >
+      [activates skill-creator skill, walks through capture-intent /
+      when-to-use / body / test prompts, presents draft]
+
+
+      Drafted **`order-line-item-extractor`** v0.1.0. One-line trigger:
+      "Extract line items (SKU, qty, unit price, total) from a
+      customer order PDF into structured JSON." Body covers: input
+      assumptions (PDF with table structure), output schema, two
+      worked examples, and an edge-case section on multi-page POs.
+      One sidecar: `scripts/extract.py` for the actual extraction.
+
+
+      Default scope is your personal library - just you will see
+      `/order-line-item-extractor` after install. Want me to publish
+      to the whole Acme org instead? Otherwise I'll go ahead with
+      user-scope and you'll get an install card to click.
+  - input: yes publish it to the whole org
+    output: >
+      [calls org_skill_installer synchronously, includes the drafted
+      manifest + body + scripts/extract.py sidecar]
+
+
+      **Installed at org scope.** skill_id `7c91...`, blob prefix
+      `org/0d3b2d2b.../skills/order-line-item-extractor/v0.1.0/`.
+
+
+      Available now to every Acme member as
+      `/order-line-item-extractor`. Existing browser sessions may
+      need a refresh before the slug appears in the composer's
+      autocomplete.
+
+
+      Want me to draft a quick how-to for the team explaining when
+      it fires?
+system_prompt: ./system_prompt.md

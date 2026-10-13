@@ -1,0 +1,67 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    uses: ./.github/workflows/validate.yml
+
+  release:
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+      COMMIT: ${{ github.sha }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check the tag
+        run: |
+          [[ "$TAG" =~ ^v[0-9]{4}\.[0-9]{1,2}\.[0-9]+$ ]] || { echo "tag $TAG is not vYYYY.M.N"; exit 1; }
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$COMMIT" origin/main || { echo "$TAG is not on main"; exit 1; }
+
+      - name: Build the index
+        run: node scripts/index.mjs --tag "$TAG" --commit "$COMMIT" --out dist/index.unsigned.json
+
+      - name: Sign the index
+        env:
+          CLANE_REGISTRY_RELEASE_KEY: ${{ secrets.CLANE_REGISTRY_RELEASE_KEY }}
+        run: node scripts/sign.mjs dist/index.unsigned.json dist/index.json
+
+      - name: Build the release tarball
+        run: git archive --format=tar.gz --prefix="clane-registry-$COMMIT/" -o "dist/registry-$TAG.tar.gz" "$COMMIT"
+
+      - name: Publish as a pre-release
+        run: |
+          gh release create "$TAG" dist/index.json "dist/registry-$TAG.tar.gz" \
+            --verify-tag --prerelease --title "$TAG" \
+            --notes "Clane registry catalogue as of $TAG ($COMMIT). index.json is signed with the registry-release key (typ registry-index)."
+
+      - name: Verify from the public URLs
+        run: node scripts/verify-release.mjs --tag "$TAG" --commit "$COMMIT"
+
+      - name: Mark as the latest release
+        run: gh release edit "$TAG" --prerelease=false --latest

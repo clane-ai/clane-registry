@@ -1,0 +1,134 @@
+name: desktop-automation
+version: 0.1.0
+description: >-
+  Drives the user's Windows desktop end to end - Excel and other Office apps,
+  files, the shell, the browser, and OS-level UI - to complete real automation
+  tasks. The default role for Clane Desktop automation runs: the agent
+  perceives the screen / app state, acts programmatically where it can (Excel
+  COM, files, scripts), and falls back to UI control only when needed.
+display:
+  icon: monitor
+  color: purple
+category: automation
+tags:
+  - desktop
+  - excel
+  - powerpoint
+  - word
+  - office
+  - automation
+  - windows
+
+# Whitelist the desktop automation skills ON TOP of the always-available core
+# skills. excel-desktop-automation teaches the COM-first approach (python_exec +
+# win32com) so the agent stops driving Excel by clicking cells one at a time;
+# powerpoint-desktop-automation and word-desktop-automation extend that same
+# COM-first model to PowerPoint and Word (build decks/documents programmatically,
+# fall back to python-pptx / python-docx for headless file output);
+# browser-desktop-automation teaches the snapshot-first, ref-based way to drive
+# the real browser via browser_control (navigate/snapshot/click/type/tabs/
+# evaluate) instead of guessing coordinates.
+allowed_skills:
+  - excel-desktop-automation
+  - powerpoint-desktop-automation
+  - word-desktop-automation
+  - browser-desktop-automation
+
+# Be generous. allowed_tools force-allows these even if a platform default-deny
+# would otherwise hide them, so a desktop-automation run has the full toolbox:
+# scripting (the Excel COM path runs through python_exec), files, web, data/
+# office converters, memory, and media. Anything not listed still falls through
+# to the normal platform default - this list is "make sure these are on", not a
+# restrictive whitelist.
+allowed_tools:
+  # scripting / execution - python_exec is how the Excel skill drives COM
+  - python_exec
+  - bash_exec
+  - node_exec
+  - js_exec
+  # files (local + per-conversation project workspace)
+  - file_read
+  - file_write
+  - file_edit
+  - file_glob
+  - file_grep
+  - download_file
+  - project_file_list
+  - project_file_read
+  - project_file_write
+  - project_file_edit
+  # skills + tool discovery
+  - list_skills
+  - activate_skill
+  - skill_read
+  - skill_list_files
+  - tool_search
+  # memory
+  - remember
+  - recall
+  - forget
+  # web
+  - web_search
+  - web_extract
+  - web_crawl
+  - web_map
+  # media
+  - image_generate
+  - image_edit
+  # data / office converters (deferred builtins - listing surfaces them)
+  - db_load
+  - db_query
+  - xlsx_summary
+  - xlsx_to_csv
+  - csv_describe
+  - csv_head
+  - csv_to_json
+  - json_query
+  - pdf_to_text
+  - pdf_to_markdown
+  - pdf_extract_tables
+  - docx_to_markdown
+  - pptx_to_text
+  - plot_quick
+  - plot_explicit
+  # interaction / housekeeping
+  - ask_user_input
+  - todo_write
+  - think
+  - summarise
+  # desktop control (SPA-supplied) - force-allowed so they're never gated
+  - computer_use
+  - browser_control
+
+# Eager-load the everyday desktop workhorses so the model sees their full
+# schemas up front instead of having to tool_search for them mid-task.
+priority_tools:
+  - python_exec
+  - file_write
+  - file_read
+  - bash_exec
+  - computer_use
+  - browser_control
+  - ask_user_input
+
+# Desktop automation is many small steps (snapshot -> act -> verify, repeated),
+# so allow a high tool-round ceiling. This is a runaway guard, not a target -
+# the model ends its own turn when the task is done.
+max_tool_rounds: 80
+
+allowed_models:
+  - anthropic/claude-sonnet-4-6
+  - anthropic/claude-opus-4-7
+  - eolas/pro
+  - anthropic/claude-haiku-4-5
+default_model: anthropic/claude-sonnet-4-6
+
+# It takes real actions on the user's machine (writes files, drives apps).
+risk_tier: external-action
+cost_cap_per_run_usd: 5.00
+
+prompt_patterns:
+  - hard_limits
+  - tool_discovery
+
+system_prompt: ./system_prompt.md

@@ -1,0 +1,84 @@
+name: app-builder
+version: 0.12.0
+description: >-
+  Builds runnable Clane apps as multi-file projects. Used as the default
+  role for kind='app' conversations: the user describes what they want,
+  you edit files under `_app/` and the live preview re-renders. Apps
+  ship as a Vite-style project (src/App.jsx, src/styles.css, sibling
+  components / helpers + per-app SQLite).
+display:
+  icon: tool
+  color: slate
+category: build
+tags:
+  - app
+  - jsx
+  - sdlc
+  - nexa
+
+# `app-builder-skills` is the single-source-of-truth skill for this
+# role. It bundles the BA / Architect / UI-UX / DBA / Developer /
+# Tester / QA / Deployer / L1-Support runbooks into one self-contained
+# folder under references/. Activating it on turn 1 gives the agent
+# everything it needs to run a one-person SDLC for an app.
+#
+# We deliberately do NOT whitelist additional skills here (no
+# interactive-component, no process-compare, no app-architect) so the
+# context window stays focused on the app surface and other parts of
+# the platform (general task chats, side-chats, Excel add-in)
+# don't accidentally get "polluted" with app-builder runbooks.
+allowed_skills:
+  - app-builder-skills
+
+allowed_tools:
+  - project_search
+
+# Hard gate: apps are client-side (they render in the sandboxed iframe, never
+# via server-side execution), so the builder NEVER needs to run code. Denying
+# these makes them unreachable — both as names in the prompt and as callable
+# tools — so the model can't "just run Python/Node" to do the task itself
+# instead of building the app. It writes files; the app does the work at run
+# time. (denied_tools can't be overridden here since they aren't in
+# allowed_tools.)
+denied_tools:
+  - python_exec
+  - node_exec
+
+# Scoped toolset — a focused, Claude-Code-style coding agent. The app-builder
+# gets ONLY these eager tools (the file tools, the app DB tool, clarify, and
+# reference-reading), not the whole core-builtin grab-bag. Keeps the context
+# lean and the agent on-task.
+core_builtins:
+  - file_read # Read a file
+  - file_write # Create a NEW file
+  - file_edit # Edit an existing file (search/replace a section) — preferred
+  - file_glob # Find files by glob
+  - file_grep # Search file contents
+  - app_db # Create/seed/inspect the app's Postgres DB (server-side)
+  - ask_user_input # Ask the user a question when genuinely blocked
+  - activate_skill # Pull an app-builder-skills reference (only when stuck)
+  - skill_read
+  - skill_list_files
+  - web_search # Look up an API/library detail when needed
+  - web_extract
+
+allowed_models:
+  # Default — Clane Max (GLM-5.2 via z.ai, OpenAI-compatible; providerKind
+  # 'glm', seeded from CLANE_MAX_API_KEY). A 1M-context reasoning model built
+  # for long-horizon agentic loops — the shape of an app-builder run (PRD →
+  # scaffold edits → test across many file_write calls). Clane Pro (Kimi K2.6)
+  # and the Anthropic models stay as fallbacks for A/B or policy reasons.
+  - eolas/max
+  - eolas/pro
+  - anthropic/claude-sonnet-4-6
+  - anthropic/claude-opus-4-7
+  - anthropic/claude-haiku-4-5
+default_model: eolas/max
+cost_cap_per_run_usd: 1.20
+risk_tier: internal
+
+prompt_patterns:
+  - hard_limits
+  - decision_checklist
+
+system_prompt: ./system_prompt.md

@@ -1,0 +1,52 @@
+name: browser-operator
+version: 0.1.0
+description: >-
+  Drives the persistent logged-in browser on another agent's behalf. Navigates,
+  reads and interacts with pages, then reports back findings — not page dumps.
+  Dispatch to this role instead of browsing inline: the accessibility snapshots
+  stay in this agent's context rather than bloating yours.
+display:
+  icon: globe
+  color: slate
+category: do
+tags:
+  - browser
+  - web
+  - research
+allowed_skills: []
+allowed_tools:
+  # The whole point of this role. `browser` is on the platform default-deny
+  # list (see PLATFORM_DEFAULT_DENY_NAMES in roleOrchestrator.ts) so it is
+  # opt-in; declaring it here is what grants access.
+  - browser
+  - project_search
+allowed_models:
+  - eolas/pro
+  - anthropic/claude-sonnet-4-6
+  - openai/gpt-5.5
+default_model: eolas/pro
+# Browsing is many small steps: navigate, snapshot, click, snapshot. The
+# round budget has to accommodate a real session, and the platform floor
+# (CLANE_ROLE_MIN_TOOL_ROUNDS) lifts this anyway.
+max_tool_rounds: 120
+# This role reports findings, not transcripts. Its own output should be a
+# summary — the caller never wants the raw tree.
+max_output_tokens: 8000
+cost_cap_per_run_usd: 3.0
+risk_tier: internal
+prompt_patterns:
+  - hard_limits
+  - self_check
+output_format: inline
+system_prompt: ./system_prompt.md
+guards:
+  - >-
+    NEVER submit a form, send a message, make a purchase, or perform any other
+    state-changing action unless the dispatching prompt explicitly asked for it.
+    Reading and navigating are always fine; acting is not.
+  - >-
+    NEVER return a raw accessibility snapshot or full page text as your answer.
+    Report the finding. If the caller needs the source, give the URL.
+  - >-
+    NEVER attempt to create accounts, bypass a login wall, or defeat a CAPTCHA.
+    Report that the site needs the user to sign in and give them the live URL.

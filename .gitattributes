@@ -1,0 +1,3 @@
+# Keep every file byte-for-byte as committed: item digests are computed over the
+# exact bytes Clane downloads, so no line-ending conversion anywhere.
+* -text

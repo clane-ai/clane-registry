@@ -1,0 +1,104 @@
+# indexer — back-of-book concept index builder. Reads the FINAL
+# assembled document and produces an alphabetised index of concepts,
+# named entities, technical terms, and their section references.
+# Output is appended to the final markdown.
+
+name: indexer
+version: 0.1.0
+description: >-
+  Builds a back-of-book index for a finished long-form document.
+  Walks the assembled markdown extracting concept terms, named
+  entities, and technical terms, then groups them alphabetically
+  with section references. Output is index.md the orchestrator
+  appends to the final document.
+display:
+  icon: list
+  color: rose
+  category: production
+tags:
+  - indexer
+  - publishing
+  - production
+  - worker
+allowed_skills:
+  - book-indexing
+allowed_tools: []
+allowed_models:
+  - eolas/pro
+  - anthropic/claude-sonnet-4-6
+default_model: eolas/pro
+# Reads the full doc + writes an index. Cost scales with doc length;
+# $3 covers a 100-page work.
+cost_cap_per_run_usd: 3.0
+# Index output for a 100-page work runs ~200-400 entries × ~50
+# chars = ~3K tokens. 6K gives headroom for big concept-heavy
+# academic works.
+max_output_tokens: 6000
+max_tool_rounds: 10
+risk_tier: internal
+prompt_patterns:
+  - hard_limits
+  - decision_checklist
+output_format: inline
+guards:
+  - >-
+    NEVER index ordinary English words (the, and, of, is, etc.). The
+    index is for CONCEPTS, NAMED ENTITIES, and TECHNICAL TERMS — not
+    a concordance.
+  - >-
+    NEVER include more than 5 page-references per index entry. If
+    a concept appears in 8 sections, that's the wrong granularity —
+    pick the 3-5 most-load-bearing sections.
+  - >-
+    NEVER list synonyms as separate entries. "Bab-el-Mandeb" and
+    "Red Sea bottleneck" pointing to the same concept should
+    collapse into ONE entry. Use "see X" for the variant.
+decision_checklist: >
+  Step 0 — Read the assembled document. Also read the style sheet
+  for any defined terms / glossary entries — those are guaranteed
+  index candidates.
+
+
+  Step 1 — Extract index candidates (in one pass):
+    - All bolded first-use defined terms (style sheet convention).
+    - All capitalised named entities: company names (Smurfit Kappa,
+      Maersk, Tirlán), regulator names (SEC, EU), people, places
+      (Bab-el-Mandeb, Rotterdam, Cape of Good Hope).
+    - All acronyms with expansions (PPWR, WCI, TEU, MENA).
+    - All technical terms italicised on first use.
+    - Numbers and dates do NOT belong in the index (they're for
+      fact-checking, not navigation).
+
+
+  Step 2 — Group + normalise. For each term:
+    - Capture line / section IDs where it appears.
+    - Collapse synonyms — pick the canonical name, point variants
+      to it via "see <canonical>".
+    - Cap section refs at 5; pick the most substantive (where
+      the term is DEFINED or DISCUSSED, not just mentioned).
+
+
+  Step 3 — Format alphabetically. The index renders at the end of
+  the final document as an H2 section:
+
+    ## Index
+
+    Bab-el-Mandeb, Section 2.1, 4, 9
+    Cape of Good Hope, Section 4
+    Container shipping. *See* shipping routes
+    Drewry, Section 4
+    EU regulation. *See* PPWR
+    PPWR (Packaging and Packaging Waste Regulation),
+      Section 1.2, 6
+    Smurfit Kappa, Section 8
+    ...
+
+  Section refs use the H2 section title (or "Section <N>" if
+  titles are long), NOT line numbers — final rendering may be
+  PDF where line numbers don't survive.
+
+
+  Step 4 — Output `.bible/index.md`. Return the path to the
+  orchestrator. The orchestrator's Step 4 (assembly) appends
+  this BEFORE the References section in the final document.
+system_prompt: ./system_prompt.md

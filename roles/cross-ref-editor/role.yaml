@@ -1,0 +1,106 @@
+# cross-ref-editor — review-pass worker that scans the assembled
+# document for opportunities to add internal "see also" references
+# between sections that touch on related concepts. Output is the
+# cross-ref-map.json file the orchestrator merges into the final
+# assembly.
+#
+# Unlike continuity-editor (which flags NEGATIVE issues), this one
+# ADDS something: links between sections that are CURRENTLY
+# independent but would benefit from explicit cross-pointers.
+
+name: cross-ref-editor
+version: 0.1.0
+description: >-
+  Reads the assembled long-form document and finds opportunities to
+  add internal "see also" cross-references between sections that
+  touch on related concepts. Output is cross-ref-map.json which the
+  orchestrator's assembly step merges into the final markdown as
+  inline "see Section X.Y" pointers.
+display:
+  icon: shuffle
+  color: sky
+  category: review
+tags:
+  - review
+  - cross-reference
+  - publishing
+  - worker
+allowed_skills:
+  - cross-referencing
+allowed_tools: []
+allowed_models:
+  - eolas/pro
+  - anthropic/claude-sonnet-4-6
+default_model: eolas/pro
+cost_cap_per_run_usd: 3.0
+# JSON output (cross-ref-map.json) — structured + small. 4K plenty.
+max_output_tokens: 4000
+max_tool_rounds: 10
+risk_tier: internal
+prompt_patterns:
+  - hard_limits
+  - decision_checklist
+output_format: inline
+guards:
+  - >-
+    NEVER add MORE than 2 cross-refs per section. A document
+    larded with "see Section X.Y" markers becomes unreadable.
+    Pick the cross-refs that genuinely save the reader from
+    flipping back.
+  - >-
+    NEVER cross-reference adjacent sections (N → N+1). The reader
+    just turned the page; the link is trivially walkable. Cross-
+    refs earn their cost when they jump 3+ sections.
+  - >-
+    NEVER cross-reference into the future ("see Section 8" from
+    section 3). Forward refs work in academic papers but make
+    business docs feel non-linear. Backward refs only ("see
+    Section 2" from section 5).
+decision_checklist: >
+  Step 0 — Read all section files (`.bible/drafts/section-*.md`)
+  and the outline (`.bible/outline.json`). The outline tells you
+  WHICH SECTION COVERS WHAT — use it to identify candidate
+  cross-ref pairs WITHOUT reading every word.
+
+
+  Step 1 — Identify cross-ref candidates. For each section, ask:
+    - Does this section make a claim or use a term DEFINED earlier?
+    - Would the reader benefit from knowing "this is the topic of
+      section X"?
+  Walk the outline pairwise (section N reading sections 1..N-1)
+  rather than 25x25 = 625 word-level comparisons.
+
+
+  Step 2 — Filter to the high-value cross-refs:
+    - Skip adjacent (N → N+1, N → N-1).
+    - Skip if the reference would be trivially obvious from the
+      outline (Section "Conclusion" referencing all prior sections
+      is noise).
+    - Keep cross-refs where the reader genuinely needs anchoring:
+      a specific technical term first defined elsewhere, a
+      conclusion that builds on an earlier finding, a number whose
+      derivation lives in a different section.
+  Cap at 2 cross-refs per section.
+
+
+  Step 3 — Output `.bible/cross-ref-map.json`:
+    [
+      {
+        "from_section": "implications",
+        "from_anchor": "scenarios",
+        "to_section": "shipping-routes",
+        "anchor_text": "Section 4 (Red Sea / Suez Disruption)",
+        "reason": "Implications section's 'conflict-escalation
+                   scenario' rests on the shipping-cost magnitudes
+                   from section 4 — reader needs the explicit
+                   pointer."
+      },
+      ...
+    ]
+  Reason field is for orchestrator's QA — not rendered in final
+  doc. The orchestrator's assembly step inserts the anchor_text
+  inline at from_anchor when stitching the final markdown.
+
+
+  Step 4 — Return the cross-ref-map.json path to the orchestrator.
+system_prompt: ./system_prompt.md

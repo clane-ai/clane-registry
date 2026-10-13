@@ -1,0 +1,129 @@
+# doc-section-writer — terminal worker role for producing one
+# section (~10 pages, ~5000 words) of a longer document.
+#
+# Designed to be dispatched by `long-doc-writer` (or any other
+# orchestrator that wants long-form prose written in parallel).
+# Has NO dispatch tool itself — workers must not spawn workers
+# (the depth cap would block it anyway, but better to forbid it
+# in the prompt than to discover it via a runtime error).
+#
+# Why a separate role and not just a skill:
+#   The orchestrator dispatches via `agent_dispatch(kind="role",
+#   target="doc-section-writer")`, and the platform's tier/model
+#   cost-resolution machinery runs against role manifests
+#   (allowed_models, default_model, cost_cap_per_run_usd). Skills
+#   don't get those primitives. A worker that needs a cost cap
+#   and tier resolution = role.
+
+name: doc-section-writer
+version: 0.1.0
+description: >-
+  Writes one section (~10 pages, ~5000 words) of a longer document
+  given a self-contained brief from an orchestrator. Terminal
+  worker — never dispatches further. Dispatched in parallel by
+  long-doc-writer.
+display:
+  icon: edit-3
+  color: slate
+category: build
+tags:
+  - document
+  - long-form
+  - markdown
+  - worker
+  - dispatched
+allowed_skills:
+  - section-writing
+# `agent_dispatch` is technically auto-injected on every role, but
+# this role's prompt forbids it (see system_prompt). The depth cap
+# in agent_dispatch.ts (MAX_DISPATCH_DEPTH=2) would block it anyway
+# at runtime, but a clear "you don't dispatch" instruction in the
+# prompt prevents the wasted tool round.
+allowed_tools: []
+# This role is invoked via tier resolution by the orchestrator
+# (`tier: "fast"` → resolves to Haiku-class). Listing fast/balanced
+# options here lets a tenant who DOESN'T have Anthropic configured
+# still run the worker on Pro. Default is balanced because the
+# tier picker overrides this anyway when called from
+# long-doc-writer.
+allowed_models:
+  - eolas/pro
+  - anthropic/claude-haiku-4-5
+  - anthropic/claude-sonnet-4-6
+default_model: eolas/pro
+# Per-section cost cap. With Haiku-class, ~5000 output tokens at
+# Haiku pricing ≈ $0.04. Cap at $0.50 for headroom — anything that
+# burns more than that is a sign the writer is misbehaving (looping,
+# tool-calling unnecessarily) and should fail fast rather than melt
+# the budget.
+cost_cap_per_run_usd: 0.5
+# Section drafter. Target ~5000 words ≈ ~7500 tokens per section
+# with 70-130% leeway. 16K gives 2x headroom — covers the upper-
+# end of the brief (6500 words at 130%) plus the few-hundred-token
+# system-prompt / brief overhead the model produces alongside the
+# section markdown. Going higher would mask a "section too big,
+# split it" bug; going lower would silently truncate dense sections.
+max_output_tokens: 16000
+risk_tier: internal
+prompt_patterns:
+  - hard_limits
+output_format: inline
+guards:
+  - >-
+    NEVER call agent_dispatch. You are a terminal worker. The
+    orchestrator decides what gets written; you write the section
+    you were briefed on, full stop.
+  - >-
+    NEVER include H1 headings (`#`). Your section starts at H2 (`##`)
+    — the orchestrator owns H1 (the document title). H1 inside your
+    output causes heading-level chaos in the assembled doc.
+  - >-
+    NEVER include preamble ("In this section we will...", "This
+    chapter covers..."), recaps of prior sections, or transitions
+    INTO the next section. The orchestrator handles structural
+    framing. Begin with substantive content; end at the last
+    substantive paragraph.
+  - >-
+    NEVER write less than 70% or more than 130% of the target word
+    count. The brief gives you a target — coming in at 1500 words
+    on a 5000-word brief means you didn't actually develop the
+    material; coming in at 9000 means you padded. Both make the
+    final doc feel uneven.
+  - >-
+    NEVER fabricate facts, statistics, or quotations. If the brief
+    says "include figures from the 2024 GDPR enforcement report" and
+    you don't have those figures, say so in the body ("Figures from
+    the 2024 GDPR enforcement report needed here — not in scope")
+    rather than inventing numbers. The orchestrator can fill them in
+    via a follow-up dispatch.
+decision_checklist: >
+  Step 0 — Read the brief end-to-end before producing a single
+  word. Internalise: section title, target words, key points,
+  audience, style sheet, adjacent-section context. The brief is
+  self-contained by design — you do NOT have access to other
+  sections' actual content.
+
+
+  Step 1 — Outline the section internally (mentally; do not emit
+  this). Match the structure to length: a 10-page section is roughly
+  3-5 H3 subsections of 1000-1500 words each. A 3-page intro is
+  one continuous flow with maybe one H3 break.
+
+
+  Step 2 — Write. Match the style sheet exactly. Lead with the
+  most important point in each subsection (BLUF — bottom line up
+  front). Use concrete examples and named scenarios over abstract
+  description. Use code blocks / tables / numbered lists where the
+  content actually warrants them — never as filler.
+
+
+  Step 3 — Self-check before returning:
+    - Word count within 70-130% of target?
+    - First line is `## {section_title}` exactly as briefed?
+    - No H1 anywhere?
+    - No preamble or sign-off?
+    - All key points from the brief covered?
+    - Style sheet rules followed (voice, tense, citation format)?
+  Fix any violations silently before returning. Do not narrate
+  the self-check.
+system_prompt: ./system_prompt.md

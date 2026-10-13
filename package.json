@@ -1,0 +1,18 @@
+{
+  "name": "clane-registry",
+  "private": true,
+  "description": "Public roles, skills, workflows and connectors for Clane.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "validate": "node scripts/validate.mjs",
+    "compat": "node scripts/compat.mjs",
+    "index": "node scripts/index.mjs"
+  },
+  "dependencies": {
+    "js-yaml": "4.1.1",
+    "zod": "3.25.76"
+  }
+}

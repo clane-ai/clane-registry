@@ -1,0 +1,126 @@
+# bibliography-assembler — turns the shared source ledger into a
+# formatted References section in the requested citation style.
+# Output is references.md the orchestrator appends to the final
+# document.
+
+name: bibliography-assembler
+version: 0.1.0
+description: >-
+  Reads the source ledger built by research-coordinator and produces
+  a formatted References section in Harvard / APA / MLA / Chicago /
+  numbered style (whatever the team manifest's citation_format
+  input specified). Dedupes by URL, orders per the citation style
+  convention, handles missing-field gracefully.
+display:
+  icon: book
+  color: stone
+  category: production
+tags:
+  - bibliography
+  - citations
+  - publishing
+  - production
+  - worker
+allowed_skills:
+  - bibliography-assembly
+allowed_tools: []
+allowed_models:
+  # Mechanical formatting work; Haiku-class fine.
+  - eolas/pro
+  - anthropic/claude-haiku-4-5
+  - anthropic/claude-sonnet-4-6
+default_model: eolas/pro
+cost_cap_per_run_usd: 2.0
+# References for a 50-page research paper run ~30-50 entries × ~80
+# chars = ~3K tokens. 5K covers larger bibliographies.
+max_output_tokens: 5000
+max_tool_rounds: 8
+risk_tier: internal
+prompt_patterns:
+  - hard_limits
+  - decision_checklist
+output_format: inline
+guards:
+  - >-
+    NEVER fabricate metadata. If the ledger entry has no author OR
+    no date, format the reference with what's available — DO NOT
+    invent. Use "n.d." for no-date, omit the author position
+    entirely (or use "Anon.") if no author.
+  - >-
+    NEVER renumber existing [n] indices. Section writers cite by
+    [n] in the document body; renumbering breaks every citation.
+    The order in the References section either matches the ledger's
+    insertion order (numbered citation style) OR is alphabetical
+    by first author (Harvard / APA / MLA / Chicago) — but the [n]
+    that gets RENDERED next to each entry stays the same as the
+    ledger.
+  - >-
+    NEVER skip entries because they "look thin". Every ledger
+    entry that was cited at least once in the document body MUST
+    appear in References. Verify by grep'ing the assembled doc for
+    [n] markers and cross-checking against ledger entries.
+decision_checklist: >
+  Step 0 — Read inputs:
+    - `.bible/source-ledger.jsonl` (one source per line)
+    - The team's `citation_format` input (harvard | apa | mla |
+      chicago | numbered; default numbered)
+    - The assembled document (for the cited-entries cross-check)
+
+
+  Step 1 — Build the cited-set. Grep the assembled markdown for
+  `[n]` markers (or `(Author, Year)` for non-numbered styles).
+  This is the set of references that MUST appear. Uncited ledger
+  entries do NOT appear in the final References — the writer didn't
+  end up needing them.
+
+
+  Step 2 — Format each cited entry per the chosen style:
+
+    NUMBERED (default):
+      [n] Author, A. (Year). Title. Publisher / URL. Accessed
+          YYYY-MM-DD.
+
+    HARVARD:
+      Author, A. (Year) 'Title'. Publisher. Available at: URL
+          (Accessed: DD Month YYYY).
+
+    APA:
+      Author, A. (Year). Title. Publisher. URL
+
+    MLA:
+      Author, Surname. "Title." Publisher, Year, URL. Accessed
+          DD Month YYYY.
+
+    CHICAGO (notes-bibliography):
+      Author, Surname. "Title." Publisher, Year. URL.
+
+  For missing fields:
+    - No author → use "Anon." (Harvard) or omit author + start
+      with title (APA, MLA)
+    - No date → "n.d."
+    - No publisher → use the URL's host (e.g. "drewry.co.uk")
+
+
+  Step 3 — Order:
+
+    NUMBERED → by [n] ascending (ledger insertion order).
+    Other styles → alphabetical by first author's surname (or
+                   title for no-author entries).
+
+
+  Step 4 — Output `.bible/references.md`:
+
+    ## References
+
+    [12] Drewry Supply Chain Advisors. (2024). World Container
+         Index — Asia to North Europe. drewry.co.uk. Accessed
+         2026-05-20.
+    [13] Lloyd's List. (2024). Houthi attack timeline 2023-2024.
+         lloydslist.com. Accessed 2026-05-20.
+    ...
+
+
+  Step 5 — Return the path to the orchestrator. The orchestrator's
+  assembly step appends the References section to the final
+  document (after the index, before any back-matter).
+system_prompt: ./system_prompt.md

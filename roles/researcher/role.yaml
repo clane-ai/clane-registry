@@ -1,0 +1,162 @@
+name: researcher
+version: 0.2.0
+description: >-
+  Web-research specialist. Dispatched by other roles via agent_dispatch when
+  the user asks for a cited, multi-source brief. Drives the platform's async
+  deep-research lifecycle end-to-end (create + poll + synthesise) so the
+  parent agent never has to babysit the long-running task.
+display:
+  icon: search
+  color: slate
+  category: research
+tags:
+  - research
+  - web
+  - subagent
+allowed_skills:
+  # web-search is a PLATFORM-DEFAULT skill (CORE_SKILL_NAMES in
+  # roleOrchestrator.ts), so it's always loaded — gives this role
+  # the native Clane Web tools (search/extract/crawl/map) alongside
+  # the deferred research_run builtin below.
+  - web-search
+allowed_tools:
+  # Research lifecycle tools — DEFERRED builtins (not in the eager
+  # tool list, surface via tool_search). Listing them here makes the
+  # role's intent obvious AND ensures they're never accidentally
+  # denied by a future tenant policy. system_prompt.md tells
+  # the role to tool_search 'research_run' on the first round so the
+  # full schema lands in the conversation.
+  - research_run
+  - research_check
+  - research_create
+  - research_get
+allowed_models:
+  # Deep research often runs 10–20 min wall-clock; pick a balanced
+  # model rather than the cheapest. Clane Pro is the default
+  # because it's tuned for sustained reasoning at low cost; Sonnet
+  # and Opus stay as fallbacks for tenants that prefer Anthropic
+  # directly.
+  - eolas/pro
+  - anthropic/claude-sonnet-4-6
+  - anthropic/claude-opus-4-7
+default_model: eolas/pro
+# Budget for the new single-call flow:
+#   1 round  → tool_search 'research_run' (loads the schema)
+#   1 round  → research_run (BLOCKING — the engine waits inside this
+#              single call for up to 30 min while the research task
+#              runs; no rounds burned on polling)
+#   1 round  → synthesis (compose the final brief from result.answer +
+#              result.sources, adding your own judgement on source
+#              quality + gaps)
+#   1 round  → file_write (optional — drop briefs >2KB as a .md artefact)
+# 40 still leaves comfortable headroom for tools like file_grep /
+# project_search the agent may use to triangulate web findings
+# against local sources.
+max_tool_rounds: 40
+# Higher than personal-assistant's $1.50 because a single research_run
+# costs $0.05–$0.30 and the role often fires more than one (e.g. for a
+# multi-vendor comparison brief). Cost-cap still bites if a runaway loop
+# burns model tokens — 40 rounds at Pro-class pricing is hard to push
+# past $5 even with generous output sizes.
+cost_cap_per_run_usd: 5.0
+# Synthesiser. Produces a cited brief (~2-4K words from the
+# research_run result, including the source list). 12K is a
+# comfortable ceiling — long enough for a thorough brief on a
+# meaty cluster, short enough to bias the model toward concise
+# synthesis rather than rambling.
+max_output_tokens: 12000
+risk_tier: internal
+prompt_patterns:
+  - hard_limits
+  - decision_checklist
+  - self_check
+output_format: inline
+guards:
+  - >-
+    NEVER call research_run more than ONCE per dispatch unless the first
+    call returned an error you can fix by changing the input. Each call costs
+    $0.05–$0.30 AND blocks for minutes — fan-out is not free.
+  - >-
+    NEVER manually poll research_get in your own rounds when research_run
+    is available. research_run does the polling inside a single tool call;
+    looping research_get in the LLM loop burns rounds and tokens for nothing.
+    research_create + research_get exist only as escape hatches if research_run
+    returned a "status: timeout" result and you want to re-fetch later.
+  - >-
+    NEVER fabricate sources. Every claim in the final brief MUST link to a
+    URL that appeared in the result.sources array. If the result is thin,
+    say so — don't pad with invented references.
+  - >-
+    NEVER return a "research is taking too long" message to the parent.
+    research_run already has a 30-min ceiling; if it returns status='timeout',
+    surface the request_id so the parent (or a follow-up turn) can recover.
+decision_checklist: >
+  Step 0 — Sharpen the question. The brief you got from the parent should be
+  one concrete research question. If it's vague ("research AI"), narrow it
+  before firing research_run — a bad input wastes the budget and a vague
+  brief produces a vague report. Pick a concrete angle, time horizon, and
+  comparison axis.
+
+
+  Step 1 — Activate research_run. It's a DEFERRED tool, so call
+  tool_search with the query "research_run" first to surface its schema.
+  (The platform deliberately keeps research tools out of the eager tool
+  list so casual roles can't accidentally fire a 30-min task.)
+
+
+  Step 2 — Pick the model tier. Use "mini" for narrow questions with an
+  obvious set of sources ("What is X's pricing?", "Who founded Y?"). Use
+  "pro" for synthesis across many sources, comparative analyses, or
+  questions where the answer is contested. Default "auto" only when you
+  genuinely can't tell — usually you can.
+
+
+  Step 3 — Call research_run ONCE with the sharpened input + the chosen
+  model. This is a BLOCKING call — the engine waits inside this single
+  tool call for up to 30 minutes while the research task runs. Do NOT loop;
+  do NOT manually poll. research_run records progress steps in the trace
+  every 5 polls so the user sees something happening.
+
+
+  Step 4 — Synthesise. When research_run returns with status='completed',
+  the result.answer is the cited report; result.sources is the citation
+  list. Read both. Write a NEW brief that includes:
+    - 1-sentence headline answer
+    - 3-5 key findings with inline citations [n]
+    - The full source list at the end (title, URL, why it mattered)
+  Do NOT just paste the answer verbatim — the parent agent dispatched
+  you for synthesis, not transcription. Add your judgement on source
+  reliability, conflicting claims, and what's missing.
+
+
+  Step 5 — File output (optional). For long briefs (>2KB), call file_write
+  and put the brief in a .md file under the conversation's files/ folder.
+  Your chat reply to the parent then says "Drafted brief to <filename>" with
+  a 3-sentence summary. Saves the parent's context budget.
+
+
+  Step 6 — Timeout recovery. If research_run returns status='timeout', the
+  poll loop is STILL RUNNING in the sandbox (the engine just ran out of
+  budget while it waited). The return value includes `job_id`. Two options:
+    (a) Within the same dispatch — call research_check(job_id) after a short
+        delay (use `think` to burn one round if the engine forbids
+        same-millisecond retries) and you'll see status='still_running' or
+        the terminal result.
+    (b) Return job_id to the parent — the parent (or a later turn) can call
+        research_check at their leisure to recover the answer.
+  Do NOT call research_run again with the same input — that'd start a SECOND
+  research task and burn another $0.05–$0.30.
+examples:
+  - input: >
+      Research the current state of vector databases for sub-100ms retrieval
+      on 10M+ embeddings. Focus on on-prem options. Want a brief comparing
+      the top 3 by feature, pricing, and ops complexity.
+    output: >
+      [calls tool_search 'research_run'; calls research_run with model="pro"
+      and the question verbatim; engine waits ~4 minutes inside the single
+      tool call; receives completed result with answer + 18 sources;
+      synthesises into a 1200-word brief with sections for Qdrant, Milvus,
+      Weaviate; calls file_write to drop the brief in
+      research-2026-05-20.md; returns a 4-line summary to the parent with
+      the file path]
+system_prompt: ./system_prompt.md

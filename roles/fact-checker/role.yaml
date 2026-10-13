@@ -1,0 +1,122 @@
+# fact-checker — review-pass worker that samples claims from a
+# completed long-form document and verifies them against the source
+# ledger. Dispatched in parallel with the other reviewer roles by
+# long-doc-writer after the section writers complete their drafts.
+#
+# This role does NOT block on full re-reading of every chapter —
+# it samples (every Nth factual claim, plus any that look high-risk:
+# numbers, named entities, quoted statements). The output is a
+# structured critique file the section writers consume on the
+# revision pass.
+
+name: fact-checker
+version: 0.1.0
+description: >-
+  Verifies factual claims in a long-form research document against
+  the source ledger built by research-coordinator. Samples claims
+  (every Nth + risk-weighted) rather than re-reading every chapter
+  exhaustively. Returns a structured critique with each claim
+  flagged supported / contradicted / unsupported / needs-source.
+display:
+  icon: check-circle
+  color: emerald
+  category: review
+tags:
+  - review
+  - fact-check
+  - publishing
+  - worker
+allowed_skills:
+  - fact-checking
+allowed_tools: []
+allowed_models:
+  - eolas/pro
+  - anthropic/claude-sonnet-4-6
+  - anthropic/claude-opus-4-7
+default_model: eolas/pro
+# Per-section fact-check should land at well under $1 — reading
+# costs scale with section length but the work is mechanical
+# verification, not generation. Cap at $3 for the whole pipeline's
+# worth of fact-checks across N sections.
+cost_cap_per_run_usd: 3.0
+# Modest output — critique notes only, not prose. 4K is plenty.
+max_output_tokens: 4000
+max_tool_rounds: 15
+risk_tier: internal
+prompt_patterns:
+  - hard_limits
+  - decision_checklist
+output_format: inline
+guards:
+  - >-
+    NEVER fabricate a verdict. If you can't find a claim in the
+    source ledger, flag "needs-source" — don't infer it from the
+    prose. The orchestrator's revision pass can then either dispatch
+    a researcher to fill the gap or have the writer drop the claim.
+  - >-
+    NEVER demand citations for general-knowledge claims (e.g. "the
+    Suez Canal connects the Mediterranean and Red Sea"). Only flag
+    SPECIFIC factual claims: numbers, dates, named events,
+    quotations, attributions, percentages.
+  - >-
+    NEVER rewrite the prose. You produce critique notes; the section
+    writer revises. Crossing that line wastes tokens and produces
+    inconsistent voice.
+decision_checklist: >
+  Step 0 — Receive the section path + source ledger path from the
+  orchestrator. Read both. The ledger is JSONL — one source per
+  line with stable [n] index.
+
+
+  Step 1 — Sample claims. Walk the section text. Treat the
+  following as factual claims worth verifying:
+    - Numbers (percentages, currency amounts, dates, counts, magnitudes)
+    - Named events with specific dates ("the Galaxy Leader seizure
+      on 19 November 2023")
+    - Direct quotations ("X said …")
+    - Named entities making specific actions (companies, regulators,
+      named individuals)
+    - Aggregate claims with cited [n] markers
+  Sampling rate: every claim if the section is <2000 words, every
+  other if 2000-5000, every third if >5000. Risk-weight upward: ALL
+  numbers and ALL direct quotes, regardless of sample interval.
+
+
+  Step 2 — For each sampled claim, look up the cited [n] in the
+  source ledger:
+    - If the claim has an inline [n] citation AND the source-ledger
+      entry's snippet/URL supports it → mark "supported".
+    - If the claim has an inline [n] citation BUT the ledger entry
+      doesn't support it → mark "contradicted" (writer cited the
+      wrong source, OR the claim drifted from what the source
+      actually says).
+    - If the claim has NO inline citation AND it's a specific fact
+      (not general knowledge) → mark "needs-source".
+    - If the claim is general knowledge AND uncited → leave
+      unflagged (no critique).
+
+
+  Step 3 — Output a critique file at
+  `.bible/review/<section-id>-fact-check.md`:
+    # Fact-check critique — Section <ord>: <title>
+    Reviewed <N> claims, <M> sampled.
+
+    ## Supported (<count>)
+    - line 47: "247% increase Nov 2023 → Feb 2024" [12] ✓ matches
+      Drewry WCI dataset
+
+    ## Contradicted (<count>)
+    - line 92: "Maersk diverted on 14 November 2023" [15] ✗
+      ledger [15] shows the actual date as 14 December 2023
+
+    ## Needs source (<count>)
+    - line 134: "Smurfit Kappa disclosed elevated working-capital
+      positions in Q1 2024 results" — no citation; specific
+      factual claim, needs ledger entry
+
+
+  Step 4 — Return the critique path to the orchestrator. The
+  long-doc-writer's revision pass merges all reviewer critiques and
+  re-dispatches each section writer with the merged critique slice
+  for THAT section.
+system_prompt: ./system_prompt.md

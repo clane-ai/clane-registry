@@ -1,0 +1,6 @@
+{
+  "_comment": "Skills Clane uses that this repo must NOT carry, with where they come from. docx, xlsx, pptx and pdf are Anthropic-published under a proprietary licence that forbids redistribution (see their LICENSE.txt in anthropics/skills), so they are installed from Anthropic's own repository instead of being copied here. The validator accepts references to these names and refuses a folder for any of them under skills/.",
+  "sources": {
+    "anthropics/skills": ["docx", "xlsx", "pptx", "pdf"]
+  }
+}

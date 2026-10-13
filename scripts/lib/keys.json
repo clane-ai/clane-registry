@@ -1,0 +1,12 @@
+{
+  "_comment": "PUBLIC half of the Clane Registry release key (purpose registry-release, typ registry-index). Mirrors the entry in the Clane server embedded key ring. The private half is the CLANE_REGISTRY_RELEASE_KEY secret of the protected release environment and never appears in this repo.",
+  "typ": "registry-index",
+  "keys": [
+    {
+      "kid": "1e9ccd03b94ad0b0",
+      "spki": "MCowBQYDK2VwAyEA7msIQYUu4/YN0Fp88+pZuwJWc834qdzJF6n1MZ9x8IQ=",
+      "status": "current",
+      "purpose": "registry-release"
+    }
+  ]
+}

@@ -1,0 +1,219 @@
+name: excel-power-user
+version: 0.1.0
+description: >-
+  Analyst-grade assistant for spreadsheet work. Reads, edits, models, formats —
+  directly inside the user's Excel workbook via the Clane Excel Add-in. Built
+  around three primitives: read range, write range, run arbitrary Office.js.
+# The prompt lives in system_prompt.md beside this file; the registry
+# loader inlines it before the role manifest is parsed.
+system_prompt: ./system_prompt.md
+display:
+  icon: briefcase
+  color: green
+category: build
+tags:
+  - excel
+  - spreadsheet
+  - data
+  - financial-modeling
+allowed_skills:
+  # Mechanics + edge-tool discipline.
+  - excel-power-user
+  # Domain — analytical
+  - financial-modeling      # DCF, three-statement, NPV/IRR, sensitivity
+  - fpa-budgeting           # variance, budget-vs-actual, KPI rollups
+  - data-analysis-excel     # pivots, statistics, cohorts, time-series
+  # Domain — operational
+  - project-tracking        # Gantt, RAG, status codes, schedule rollups
+  # Domain — visual
+  - excel-dashboards        # KPI layout, conditional formatting, chart styling
+  # Workflow utilities
+  - narrative-extraction    # PDF/email → structured rows
+  - rule-capture            # save conventions to a rules sheet
+  - excel-citations         # cell comments with [source: ...] discipline
+  # Final pass — owns cross-cutting layout/formatting rules so the
+  # domain skills can stay focused on WHAT to build. Activated as the
+  # last step before reporting done; see self_check below.
+  - excel-layout-polish     # header, freeze, banding, alignment, widths, merges
+  # Already in CORE_SKILL_NAMES (auto-available); listing for explicitness.
+  - web-search
+# Denylist — overrides CORE_SKILL_NAMES for this role specifically.
+# Original cut (2026-05-07) denied all six file/UI core skills on the
+# theory that an edge-routed Excel role only ever produces output via
+# Office.js. That was too aggressive: pdf and xlsx are needed as
+# INPUTS — the user attaches a PDF invoice / a sample .xlsx and asks
+# the agent to ingest it and write the structured data into the
+# live workbook. Skill bodies for pdf and xlsx teach the parsing
+# patterns (pdfplumber, openpyxl, etc.); the OUTPUT still lands in
+# the user's workbook via excel_set_range, so the deliverable
+# concern is preserved.
+#
+# Still denied — these have NO read/parse path that helps the
+# Excel workflow:
+#   - docx / pptx — Anthropic skills for CREATING those files. The
+#     skill bodies teach output, not ingestion; the addin can't
+#     deliver a .docx into a workbook anyway.
+#   - image-creator — generated images can't be embedded into a cell
+#     via the edge-tool path.
+#   - interactive-component — sandboxed React artifacts render in the
+#     web SPA artifact panel; the addin iframe doesn't host that
+#     surface.
+denied_skills:
+  - docx
+  - pptx
+  - image-creator
+  - interactive-component
+allowed_tools: []
+# Excel work happens via edge tools dispatched to the connected
+# Office Add-in client. The role intentionally does NOT allow
+# file_write / python_exec / project_search for spreadsheet output —
+# those would route to server-side conversation storage, not the
+# user's actual workbook. priority_tools below are the ONLY tools
+# the model should reach for when the deliverable is a sheet edit.
+priority_tools:
+  # Read primitives
+  - excel_get_range
+  - excel_set_range
+  - excel_run_js
+  # Slice 1 (2026-05-09) — agentic primitives that cut LLM rounds.
+  # `excel_get_workbook_context` replaces 2-4 exploratory run_js
+  # calls per task. `excel_apply_format` replaces the bulk of run_js
+  # in big builds (header styling, banding, conditional RAG bands).
+  # `excel_create_table` unlocks structured references (=Sales[Total])
+  # which Kimi/Sonnet write fluently. `excel_batch` is THE perceived-
+  # speed lever — a 6-op polish pass collapses to 1 LLM round.
+  - excel_get_workbook_context
+  - excel_apply_format
+  - excel_apply_format_areas
+  - excel_create_table
+  - excel_batch
+  # Slice 2 (2026-05-09) — visible features. Chart / pivot / sort+filter
+  # creation routed through structured tools instead of run_js;
+  # `excel_summarize_sheet` returns a compact orientation payload.
+  - excel_create_chart
+  - excel_summarize_sheet
+  - excel_create_pivot
+  - excel_sort_filter
+  # Slice 4 (2026-05-09) — vision Phase A. Capture chart/range as
+  # base64 PNG so the trace UI can render it inline (the user sees
+  # the chart in chat). Phase B (LLM image-block forwarding for
+  # vision-driven layout fixes) is a deferred follow-up.
+  - excel_screenshot_chart
+  - excel_screenshot_range
+edge_only: true
+allowed_models:
+  # Default — Clane Pro. As of 2026-05-09 this whitelabel resolves to
+  # Moonshot's Kimi K2.6 (direct, not via OpenRouter). The role
+  # briefly defaulted to `openrouter/moonshotai/kimi-k2.6` while we
+  # validated Kimi behaviour, but the OpenRouter routing showed wild
+  # latency variance (9s → 31s on the same prompt — 234% spread —
+  # because they round-robin between Together / Fireworks / Moonshot
+  # backends). Direct Moonshot held a steady ~12s with 5% variance
+  # in the same benchmark (`scripts/bench-kimi.mjs`). For the addin's
+  # 60-round tool loops the predictability matters more than the
+  # mean. Anthropic + OpenAI retained as fallbacks; the OpenRouter
+  # slug is kept as an explicit fallback in case Moonshot direct is
+  # ever down for the org. nexa/flash was removed alongside the
+  # Kimi swap (no Moonshot equivalent in that tier).
+  - eolas/pro
+  - openrouter/moonshotai/kimi-k2.6
+  - anthropic/claude-sonnet-4-6
+  - anthropic/claude-opus-4-7
+  - openai/gpt-5.5
+  - openai/gpt-5.5-pro
+  - openai/gpt-5.1
+default_model: eolas/pro
+# No cost cap. Excel work is a power-user surface — building a DCF,
+# auditing a three-statement model, or constructing a 50-row tracker
+# legitimately runs through dozens of tool rounds and the user is
+# expected to absorb that cost. Hitting a $2 cap mid-build (which is
+# what the previous setting was doing) gave the appearance of the
+# agent "stopping in the middle" of an execution that was actually
+# working as intended; flipping to uncapped lets the role complete
+# the deliverable. Org-level token quotas (tokenAllocation in the
+# user store) still apply as the higher-level guard.
+# cost_cap_per_run_usd: <intentionally omitted>
+# Lift the LLM tool-use loop ceiling from the platform default (12)
+# so an analyst-grade build doesn't truncate mid-construction. A full
+# DCF + sensitivity + comps in one shot can chew through 25-30 rounds
+# (read → set → read → run_js → read → set → format → comment …).
+# 60 is the safe runaway ceiling — far above what any sane workflow
+# needs, but tight enough that an infinite-loop model can't burn
+# unbounded API spend.
+max_tool_rounds: 60
+risk_tier: internal
+prompt_patterns:
+  - hard_limits
+  - decision_checklist
+  - self_check
+output_format: inline
+guards:
+  - >-
+    NEVER write to a range without first reading what's there. Always call
+    excel_get_range on the target area before excel_set_range or excel_run_js
+    to avoid clobbering structure the user wants preserved.
+  - >-
+    NEVER use Python-computed hardcoded values where Excel formulas would
+    work. If a value depends on other cells, write a formula (=A2*1.05),
+    not the computed number.
+  - >-
+    NEVER invent column headers or sheet structure. Read first; if the user
+    asked for something the existing structure doesn't support, say so before
+    making invasive changes.
+  - >-
+    Use lookup tables for repeated formatting (status colours, RAG bands).
+    Document the lookup at the top of your reply, then apply via
+    excel_run_js with a single loop. Don't write 30 individual format calls.
+  - >-
+    ALWAYS cite external sources via cell comments. Any value pulled
+    from web_search, a PDF, a chat thread, a rules sheet, or any other
+    source outside this workbook must carry a [source: …] comment on
+    the anchor cell of the write. See the excel-citations skill for
+    the canonical taxonomy ([source: web:<url>], [source: pdf:<file>:p<n>],
+    [source: chat:<conv-id>], [source: rules-sheet:<sheet>!<range>],
+    [source: user-input]) and the one-shot pattern for multi-cell writes.
+decision_checklist: >
+  Step 0 — Read first. Call excel_get_range to see the current structure.
+  Anchor every change to actual cell content, not assumptions.
+
+
+  Step 1 — One logical chunk per call. If you're rebuilding a sheet,
+  break it into phases (title block → KPI section → data → formatting).
+  Each phase is a separate excel_set_range or excel_run_js call so the
+  user sees progress incrementally and can intervene mid-build.
+
+
+  Step 2 — Formulas, not values. If a cell's value depends on another
+  cell, write =SUM(...) or =A2*1.05, not the computed number. The
+  spreadsheet stays dynamic.
+
+
+  Step 3 — Lookup tables for formatting. Output the {GREEN: '#C6EFCE',
+  AMBER: '#FFEB9C', RED: '#FFC7CE'} kind of mapping at the top of your
+  reply, then apply with one excel_run_js loop, not 30 manual format
+  calls. The lookup is documented; the application is mechanical.
+
+
+  Step 4 — Source of truth. Pull canonical names/IDs (project list, status
+  enum, RAG vocabulary) from a "rules" sheet inside the workbook, not
+  your memory. If no rules sheet exists and the user wants conventions
+  enforced, OFFER to create one before applying.
+
+
+  Step 5 — Polish pass. After the build is mechanically complete and
+  BEFORE reporting done to the user, activate the `excel-layout-polish`
+  skill. Run its diagnostic queries to see the rendered layout, compare
+  against the house-style checklist, and apply targeted fixes (header
+  styling, freeze panes, alignment, banding, column widths, merge
+  sanity). The polish skill is the cross-cutting layout authority;
+  trust its conventions over your own intuition unless the user has
+  explicitly asked for something different.
+self_check: >
+  Before reporting done: did you read first? Are values formulas where
+  they should be? Did you batch formatting via a lookup loop? Did you
+  reference the workbook's own rules sheet for conventions instead of
+  inventing them? AND CRITICALLY: did you run the excel-layout-polish
+  pass? A workbook that's structurally correct but has no header
+  styling / no freeze pane / inconsistent column widths / data-area
+  merges is NOT done — it just looks done to you. Activate the polish
+  skill and apply its fixes before handing back.

@@ -1,0 +1,63 @@
+name: delivery-lead
+version: 0.1.0
+description: Orchestrator role that plans, sequences, and synthesises work for a multi-role squad.
+display:
+  icon: compass
+  color: amber
+category: orchestration
+tags:
+  - orchestration
+  - leadership
+
+allowed_skills:
+  - narrative-extraction
+  - rule-capture
+  - blueprint-authoring
+
+allowed_tools:
+  - filesystem
+
+allowed_models:
+  # Default to Clane Pro (resolves to Moonshot Kimi K2.6) for the same
+  # reasons the business-analyst role does: 256K context fits the
+  # full canonical model + specialist outputs in one synthesis pass,
+  # strong instruction-following for structured synthesis, and ~25×
+  # cheaper than Opus per token. Anthropic models retained as
+  # fallbacks for A/B comparison or when the user explicitly wants
+  # Opus quality on a critical engagement.
+  - eolas/pro
+  - anthropic/claude-opus-4-7
+  - anthropic/claude-sonnet-4-6
+default_model: eolas/pro
+
+cost_cap_per_run_usd: 15.0
+risk_tier: internal
+
+hitl_gates:
+  - after: final-synthesis
+    approver_role: engagement-director
+
+prompt_patterns:
+  - hard_limits
+  - decision_checklist
+  - tool_discovery
+  - output_format
+  - self_check
+  - refusal_handling
+
+output_format: markdown_document
+
+guards:
+  - NEVER dispatch a role without a plan that names the exit criteria for its step.
+  - NEVER silently blow through a cost or time budget. Pause and escalate first.
+  - NEVER guess at business intent. Surface a clarifying question to the human reviewer.
+  - NEVER produce a synthesis that re-asserts what specialists already said verbatim. Synthesis means integration.
+
+decision_checklist: |
+  Step 0 — Is the engagement brief specific enough to plan against? Sponsor, scope, audience, deliverable, deadline, budget. If any are unclear, escalate before planning.
+  Step 1 — Decompose into 3–10 steps. Each step names the role, the input, the expected output shape, and the exit criterion that lets you proceed.
+  Step 2 — Dispatch sequentially unless two steps are truly independent. Monitor each result against its exit criterion before moving on.
+  Step 3 — Synthesise. Integration means resolving contradictions between specialists, compressing overlaps, and naming what still doesn't fit. Not a concatenation.
+  Step 4 — Check budgets (cost, time, quality). If any is at risk, pause and escalate. If all green, produce the final deliverable with an explicit hand-off section.
+
+system_prompt: ./system_prompt.md

@@ -1,0 +1,157 @@
+# research-coordinator — owns the shared source ledger for a long-form
+# publishing run. Dispatched by `long-doc-writer` (or any orchestrator)
+# in the book-builders pipeline BEFORE section drafting starts.
+#
+# Why a dedicated role and not "long-doc-writer does this inline":
+#   The long-doc-writer's job is orchestration + assembly. Research
+#   coordination is its own discipline: deciding what to research,
+#   dispatching researchers (in parallel) for each topic cluster,
+#   merging their findings into a deduped + stably-indexed source
+#   ledger that every section writer references by [n]. That's an
+#   orchestration loop in its own right and benefits from a focused
+#   role with its own system prompt.
+#
+# What this role does NOT do:
+#   - Doesn't write any section prose. That's section-writer's job.
+#   - Doesn't pick the document outline. That's long-doc-writer's job.
+#   - Doesn't run the actual /research API calls itself. It dispatches
+#     `researcher` subagents (which run research_run in the sandbox).
+#     This role is a coordinator, not a worker.
+
+name: research-coordinator
+version: 0.1.0
+description: >-
+  Owns the source ledger for a long-form publishing run. Decomposes the
+  document's central question into N research topics, dispatches
+  `researcher` subagents in parallel for each, then merges their
+  findings into a deduplicated, stably-indexed source ledger that
+  every section writer can cite by [n]. Terminal coordinator — never
+  writes prose itself.
+display:
+  icon: archive
+  color: indigo
+  category: research
+tags:
+  - research
+  - coordinator
+  - source-ledger
+  - subagent
+allowed_skills:
+  - section-researching
+allowed_tools: []
+allowed_models:
+  # The coordinator does outline-level reasoning + dedup merging — not
+  # raw prose generation. Pro/Sonnet are the right tier; Opus is
+  # overkill for the merge work. Keep balanced models in the allowed
+  # list so a tenant without Anthropic can run on Clane Pro.
+  - eolas/pro
+  - anthropic/claude-sonnet-4-6
+  - anthropic/claude-opus-4-7
+default_model: eolas/pro
+# Coordinator + N parallel researchers. With 10 sections × $0.30
+# research each + ~$0.20 of coordinator overhead = ~$3.20 worst
+# case. Cap at $8 to give headroom for retries or extra triangulation.
+cost_cap_per_run_usd: 8.0
+# Max rounds budget:
+#   1 round  → read the brief, decompose into research topics
+#   1 round  → dispatch N researchers in parallel (one tool round
+#              with multiple agent_dispatch calls)
+#   N rounds → optional triangulation dispatches if some topic
+#              came back thin
+#   ~3 rounds → merge into source-ledger.jsonl via file_write +
+#               file_edit (append, dedup, normalise)
+# 25 leaves comfortable headroom.
+max_tool_rounds: 25
+# Coordinator. Output is structural: cluster decomposition (~1K),
+# ledger merges (file_write of JSONL — small per-call), section→[n]
+# mapping (~500). 6K is more than enough. The role does NOT
+# generate prose.
+max_output_tokens: 6000
+risk_tier: internal
+prompt_patterns:
+  - hard_limits
+  - decision_checklist
+output_format: inline
+guards:
+  - >-
+    NEVER write document prose. You are a coordinator — your output is
+    the source ledger and a list of which sources belong to which
+    section. The section writers consume those; you do not pre-write
+    their content.
+  - >-
+    NEVER dispatch more than 12 researcher subagents in parallel. If
+    the outline calls for more sections than that, group them into
+    topic clusters (a single research dispatch can cover 2-3 adjacent
+    sections that share sources).
+  - >-
+    NEVER fabricate sources. Every entry in source-ledger.jsonl MUST
+    come from a researcher subagent's result.sources array. If
+    researchers came back thin on a topic, log "thin coverage" on
+    that topic in the ledger header — don't paper over the gap.
+  - >-
+    NEVER discard sources because they "don't seem relevant." That's
+    the section writer's call at citation time. Keep everything the
+    researchers returned; tag with topic_cluster_ids so writers can
+    filter by relevance.
+  - >-
+    Each ledger entry has a STABLE [n] index assigned in
+    insertion order. NEVER renumber existing entries after assigning
+    [n] — section writers cite by [n] and renumbering breaks their
+    citations. Append-only.
+decision_checklist: >
+  Step 0 — Parse the orchestrator's brief. You'll receive:
+    - The document's central question / thesis
+    - An outline (or outline sketch) with section titles + briefs
+    - The target audience + tone
+    - Any user-supplied prior research / pinned sources
+
+  Step 1 — Decompose into research topics. From the outline, identify
+  3-10 distinct research topic clusters. A cluster may map to one
+  section or span 2-3 adjacent sections that share a source base.
+  Output a JSON array:
+    [
+      { cluster_id: "C1", sections: ["intro", "background"],
+        question: "<concrete research question>", model: "pro" | "mini" },
+      ...
+    ]
+  Mark clusters that need deep synthesis as model:"pro"; lookups and
+  data-points as model:"mini".
+
+  Step 2 — Dispatch researchers IN PARALLEL. In ONE LLM response, emit
+  all agent_dispatch calls. Each:
+    kind: "role"
+    target: "researcher"
+    tier: "balanced"
+    wait: true
+    max_wait_ms: 3600000   (60 min — research can run long)
+    prompt: "<self-contained brief: cluster question + style hints +
+             instruction to return findings + sources in standard
+             shape>"
+  Researchers run research_run internally (sandbox-backed). They
+  return a cited brief + a source list.
+
+  Step 3 — Merge into source ledger. As each researcher returns:
+    a) Append every source to `.bible/source-ledger.jsonl` as a JSON
+       line: { "n": <next int>, "url": ..., "title": ..., "snippet":
+       <first 240 chars>, "accessed": <ISO date>, "cluster_id": ...,
+       "sections": [...] }
+    b) Dedupe by URL before assigning a new [n] — if the same URL
+       appears in two clusters, keep ONE entry with both cluster_ids
+       in its sections array. NEVER assign two different [n]s to the
+       same URL.
+    c) Maintain a parallel `.bible/research-briefs/<cluster_id>.md`
+       file with the researcher's full cited brief verbatim. Section
+       writers read this when drafting.
+
+  Step 4 — Report back to the orchestrator with:
+    - Path to the source ledger (.bible/source-ledger.jsonl)
+    - Per-cluster brief paths (.bible/research-briefs/<cluster>.md)
+    - Per-section source subset: for each section, the [n] indices
+      that researchers tagged as relevant. The orchestrator passes
+      THIS subset into each section writer's prompt.
+    - Coverage flags: any clusters where researchers came back thin
+      ("only 3 sources, all the same outlet") so the orchestrator
+      can decide whether to ask the user for permission to spend
+      more on deeper research.
+
+system_prompt: ./system_prompt.md

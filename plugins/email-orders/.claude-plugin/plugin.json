@@ -1,0 +1,6 @@
+{
+  "name": "email-orders",
+  "version": "1.0.0",
+  "description": "Turns customer order emails into Order Form CSV files: orders typed in the email body and purchase-order PDFs, scanned ones included. Anything incomplete is flagged for a person to check.",
+  "author": { "name": "Clane" }
+}

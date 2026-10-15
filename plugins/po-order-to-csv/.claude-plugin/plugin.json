@@ -1,0 +1,6 @@
+{
+  "name": "po-order-to-csv",
+  "version": "1.0.0",
+  "description": "Turns purchase-order PDFs dropped in a SharePoint folder into Order Form CSV files, with your own stock codes. Strict by default: an order with any unmapped line fails instead of reaching your ERP.",
+  "author": { "name": "Clane" }
+}

@@ -1,0 +1,314 @@
+{
+  "name": "PO to Order CSV",
+  "version": "1.0.0",
+  "description": "Watches a SharePoint folder for purchase-order PDFs, extracts and self-checks each one, maps customer codes to your stock codes, and writes an Order Form CSV to a second folder. Each PDF moves to Processed or Failed.",
+  "category": "operations",
+  "tags": [
+    "purchasing",
+    "purchase-order",
+    "extraction",
+    "csv",
+    "sharepoint"
+  ],
+  "settings": [
+    {
+      "name": "inbox",
+      "type": "folder",
+      "access": "read_write",
+      "label": "Purchase orders arrive in"
+    },
+    {
+      "name": "processed_folder",
+      "type": "folder",
+      "access": "write",
+      "same_drive_as": "inbox",
+      "label": "Move processed PDFs to"
+    },
+    {
+      "name": "failed_folder",
+      "type": "folder",
+      "access": "write",
+      "same_drive_as": "inbox",
+      "label": "Move failed PDFs to"
+    },
+    {
+      "name": "output_folder",
+      "type": "folder",
+      "access": "write",
+      "label": "Write order CSVs to"
+    },
+    {
+      "name": "code_mapping",
+      "type": "file",
+      "format": "csv",
+      "expected_columns": [
+        "customer",
+        "customer_code",
+        "stock_code"
+      ],
+      "label": "Stock code mapping"
+    },
+    {
+      "name": "customer_registry",
+      "type": "file",
+      "format": "csv",
+      "expected_columns": [
+        "customer_name",
+        "account_code"
+      ],
+      "label": "Customer accounts"
+    },
+    {
+      "name": "check_every",
+      "type": "schedule",
+      "default": {
+        "every_minutes": 5
+      },
+      "min_interval_minutes": 5,
+      "label": "Check for new orders"
+    },
+    {
+      "name": "strict",
+      "type": "boolean",
+      "default": true,
+      "required": false,
+      "label": "Fail an order with any unmapped line"
+    },
+    {
+      "name": "csv_columns",
+      "type": "text",
+      "required": false,
+      "label": "CSV columns",
+      "help": "Comma-separated field:Heading pairs, in file order. Fields: customer, store_branch, required_date, po_number, qty, stock_code, price.",
+      "default": "customer:Customer,store_branch:Store/Branch,required_date:Required Date,po_number:Customer Order Number,qty:Order Qty.,stock_code:Stock Code,price:Price"
+    },
+    {
+      "name": "csv_delimiter",
+      "type": "select",
+      "required": false,
+      "label": "CSV delimiter",
+      "default": ",",
+      "options": [
+        {
+          "value": ",",
+          "label": "Comma"
+        },
+        {
+          "value": ";",
+          "label": "Semicolon"
+        },
+        {
+          "value": "tab",
+          "label": "Tab"
+        }
+      ]
+    },
+    {
+      "name": "csv_date_format",
+      "type": "select",
+      "required": false,
+      "label": "Date format",
+      "default": "dd.mm.yy",
+      "options": [
+        {
+          "value": "dd.mm.yy",
+          "label": "21.10.26"
+        },
+        {
+          "value": "dd/mm/yyyy",
+          "label": "21/10/2026"
+        },
+        {
+          "value": "yyyy-mm-dd",
+          "label": "2026-10-21"
+        }
+      ]
+    },
+    {
+      "name": "csv_bom",
+      "type": "boolean",
+      "default": true,
+      "required": false,
+      "label": "Start the file with a byte order mark (Excel opens it cleanly)"
+    }
+  ],
+  "triggers": [
+    {
+      "name": "watch_inbox",
+      "kind": "folder_watch",
+      "source": "{{settings.inbox}}",
+      "pattern": "*.pdf",
+      "schedule": "{{settings.check_every}}",
+      "limits": {
+        "max_items_per_tick": 5,
+        "max_concurrent_runs": 1,
+        "max_file_mb": 25,
+        "run_timeout_minutes": 15
+      },
+      "after": {
+        "success": {
+          "move_to": "{{settings.processed_folder}}"
+        },
+        "failure": {
+          "move_to": "{{settings.failed_folder}}",
+          "write_reason": true
+        }
+      }
+    }
+  ],
+  "requires": {
+    "skills": [],
+    "connectors": [],
+    "tools": [
+      "python_exec"
+    ],
+    "roles": []
+  },
+  "definition": {
+    "version": "1.0",
+    "nodes": [
+      {
+        "id": "trigger-1",
+        "type": "trigger",
+        "position": {
+          "x": 320,
+          "y": 40
+        },
+        "data": {
+          "label": "PO arrives",
+          "outcomes": [],
+          "config": {
+            "output_key": "trigger"
+          },
+          "instructions": "A purchase-order PDF from the watched folder, staged into the working folder."
+        }
+      },
+      {
+        "id": "parse-1",
+        "type": "code",
+        "position": {
+          "x": 320,
+          "y": 180
+        },
+        "data": {
+          "label": "Parse PO",
+          "outcomes": [],
+          "config": {
+            "language": "python",
+            "code": "def main():\n    import glob\n    import pdfplumber\n    from bs4 import BeautifulSoup\n\n    cands = sorted(f for f in glob.glob(\"*\")\n                   if f.lower().endswith((\".pdf\", \".htm\", \".html\")))\n    if not cands:\n        return {\"error\": \"No PO file (.pdf/.htm) found in the working folder.\"}\n    path = cands[0]\n    if path.lower().endswith(\".pdf\"):\n        text = \"\"\n        with pdfplumber.open(path) as pdf:\n            for pg in pdf.pages:\n                text += (pg.extract_text() or \"\") + \"\\n\"\n        fmt = \"pdf\"\n    else:\n        html = open(path, encoding=\"utf-8\", errors=\"replace\").read()\n        text = BeautifulSoup(html, \"html.parser\").get_text(\"\\n\")\n        fmt = \"html\"\n    return {\"file\": path, \"format\": fmt, \"text\": text}",
+            "output_key": "parsed"
+          },
+          "instructions": "Read the staged PO file and extract its text."
+        }
+      },
+      {
+        "id": "extract-1",
+        "type": "role",
+        "position": {
+          "x": 320,
+          "y": 320
+        },
+        "data": {
+          "label": "Extract + self-correct",
+          "outcomes": [],
+          "config": {
+            "prompt": "You are a purchase-order extractor. The parsed purchase order text is in the context above (the `parsed` channel).\n\nCRITICAL - how to respond:\n- Do NOT use any tool. Do NOT call python_exec or write/run code. Read the text and write the JSON yourself.\n- Respond with ONLY a single JSON object: your reply must START with `{` and END with `}`. No prose, no explanation, no thinking tags, no markdown fences.\n\nThe JSON has EXACTLY these keys:\n{\n  \"customer\": \"<the customer name/short code as shown on the PO>\",\n  \"store_branch\": <delivery branch/ship-to number or code, else null>,\n  \"required_date\": \"<delivery/required date as dd.mm.yy>\",\n  \"po_number\": \"<the customer order / purchase order number>\",\n  \"total\": <the PO's goods subtotal before VAT/delivery as a number, else null>,\n  \"note\": \"<self-correction notes (see rules)>\",\n  \"lines\": [ {\"qty\": <integer>, \"code\": \"<product code as printed>\", \"price\": <number>} ]\n}\n\nSelf-correct rules:\n1. For `code`, use the product code as printed on the PO (prefer the supplier code column when the PO shows one). A downstream step maps it to your own stock code via your code mapping, so do NOT guess a mapping.\n2. If a line has no product code, set \"code\": \"\" and name that line in `note`. NEVER invent a code.\n3. Compute Sum(qty x price) and compare to the PO's stated order/total value; say whether it matches in `note`.\n4. Normalise the date to dd.mm.yy.\nOutput ONLY the JSON object.",
+            "output_key": "extracted",
+            "max_tool_rounds": 6,
+            "max_output_tokens": 4000
+          },
+          "instructions": "Extract header + lines (code as printed), self-correct, emit JSON."
+        }
+      },
+      {
+        "id": "build-1",
+        "type": "code",
+        "position": {
+          "x": 320,
+          "y": 460
+        },
+        "data": {
+          "label": "Build Order CSV",
+          "outcomes": [],
+          "config": {
+            "language": "python",
+            "code": "def main():\n    import csv, io, json, re\n\n    def setting(name, default):\n        value = getattr(settings, name, default)\n        return default if value is None else value\n\n    raw = extracted.output or \"\"\n    raw = re.sub(r\"<thinking>.*?</thinking>\", \"\", raw, flags=re.S | re.I)\n    raw = raw.replace(\"```json\", \"\").replace(\"```\", \"\")\n    m = re.search(r\"\\{.*\\}\", raw, re.S)\n    if not m:\n        raise ValueError(\"The extraction returned no order data.\")\n    try:\n        spec = json.loads(m.group(0))\n    except ValueError:\n        raise ValueError(\"The extraction returned order data that could not be read.\")\n    if not isinstance(spec, dict):\n        raise ValueError(\"The extraction returned order data that could not be read.\")\n    strict = bool(setting(\"strict\", True))\n\n    def norm(s):\n        return re.sub(r\"\\s+\", \"\", str(s or \"\")).upper()\n\n    def num(v):\n        if isinstance(v, bool):\n            return None\n        if isinstance(v, (int, float)):\n            return float(v)\n        if isinstance(v, str):\n            cleaned = re.sub(r\"[^0-9.,-]\", \"\", v)\n            if not cleaned or cleaned in (\"-\", \".\", \",\"):\n                return None\n            if \",\" in cleaned and \".\" in cleaned:\n                cleaned = cleaned.replace(\",\", \"\")\n            elif \",\" in cleaned:\n                head, _, tail = cleaned.rpartition(\",\")\n                cleaned = head.replace(\",\", \"\") + (\".\" + tail if len(tail) != 3 else tail)\n            try:\n                return float(cleaned)\n            except ValueError:\n                return None\n        return None\n\n    def rows_of(name, columns):\n        path = setting(name, None)\n        if not path:\n            return []\n        with open(path, encoding=\"utf-8-sig\", newline=\"\") as fh:\n            reader = csv.DictReader(fh)\n            missing = [c for c in columns if c not in (reader.fieldnames or [])]\n            if missing:\n                raise ValueError(\"The %s file is missing the column%s %s.\" % (\n                    name.replace(\"_\", \" \"), \"\" if len(missing) == 1 else \"s\", \", \".join(missing)))\n            return list(reader)\n\n    mapping = rows_of(\"code_mapping\", [\"customer\", \"customer_code\", \"stock_code\"])\n    registry = {}\n    for r in rows_of(\"customer_registry\", [\"customer_name\", \"account_code\"]):\n        registry[norm(r.get(\"customer_name\"))] = (r.get(\"account_code\") or \"\").strip()\n\n    customer_in = str(spec.get(\"customer\") or \"\")\n    known = {norm(r.get(\"customer\")) for r in mapping if norm(r.get(\"customer\"))} | {k for k in registry if k}\n    typed = norm(customer_in)\n    key = typed if typed in known else None\n    if key is None and typed:\n        inside = [k for k in known if k in typed]\n        key = max(inside, key=len) if inside else None\n\n    problems = []\n    lines = spec.get(\"lines\") or []\n    if not isinstance(lines, list) or not lines:\n        raise ValueError(\"The order has no lines.\")\n    if key is None:\n        problems.append(\"Customer '%s' is not in your stock code mapping or customer accounts.\" % customer_in)\n\n    lines_sum = 0.0\n    for i, ln in enumerate(lines, 1):\n        qty, price = num(ln.get(\"qty\")), num(ln.get(\"price\"))\n        code = norm(ln.get(\"code\"))\n        shown = ln.get(\"code\") or \"(blank)\"\n        ln[\"stock_code\"] = \"\"\n        if key is not None:\n            found = {(r.get(\"stock_code\") or \"\").strip() for r in mapping\n                     if norm(r.get(\"customer\")) == key and norm(r.get(\"customer_code\")) == code and code}\n            found.discard(\"\")\n            if len(found) > 1:\n                problems.append(\"Line %d code %s is mapped more than once.\" % (i, shown))\n            elif not found:\n                problems.append(\"Line %d code %s has no stock code mapping.\" % (i, shown))\n            else:\n                ln[\"stock_code\"] = found.pop()\n        if qty is None:\n            problems.append(\"Line %d has no valid quantity.\" % i)\n        if price is None:\n            problems.append(\"Line %d has no price.\" % i)\n        lines_sum += (qty or 0.0) * (price or 0.0)\n\n    account = registry.get(key) if key is not None else None\n    if key is not None and not account:\n        problems.append(\"No account code for customer '%s' in the customer accounts file.\" % customer_in)\n\n    total = num(spec.get(\"total\"))\n    if total is not None and abs(total - lines_sum) > 0.005:\n        problems.append(\"The PO states an order total %.2f but the lines add up to %.2f.\" % (total, lines_sum))\n\n    def parse_date(value):\n        d = re.match(r\"^\\s*(\\d{1,2})[./-](\\d{1,2})[./-](\\d{2,4})\\s*$\", str(value or \"\"))\n        if not d:\n            return None\n        day, month, year = int(d.group(1)), int(d.group(2)), d.group(3)\n        year = int(year) + 2000 if len(year) == 2 else int(year)\n        if not (1 <= day <= 31 and 1 <= month <= 12):\n            return None\n        return day, month, year\n\n    parsed_date = parse_date(spec.get(\"required_date\"))\n    if parsed_date is None:\n        problems.append(\"The required date '%s' is not a date.\" % (spec.get(\"required_date\") or \"\"))\n\n    if problems and strict:\n        raise ValueError(\" \".join(problems))\n\n    def fmt_date():\n        if parsed_date is None:\n            return str(spec.get(\"required_date\") or \"\")\n        day, month, year = parsed_date\n        style = setting(\"csv_date_format\", \"dd.mm.yy\")\n        if style == \"dd/mm/yyyy\":\n            return \"%02d/%02d/%04d\" % (day, month, year)\n        if style == \"yyyy-mm-dd\":\n            return \"%04d-%02d-%02d\" % (year, month, day)\n        return \"%02d.%02d.%02d\" % (day, month, year % 100)\n\n    header_fields = {\n        \"customer\": account or customer_in,\n        \"store_branch\": str(spec.get(\"store_branch\") or \"\"),\n        \"required_date\": fmt_date(),\n        \"po_number\": str(spec.get(\"po_number\") or \"\"),\n    }\n    default_columns = (\"customer:Customer,store_branch:Store/Branch,required_date:Required Date,\"\n                       \"po_number:Customer Order Number,qty:Order Qty.,stock_code:Stock Code,price:Price\")\n    columns = [c.split(\":\", 1) for c in str(setting(\"csv_columns\", default_columns)).split(\",\") if \":\" in c]\n    if not columns:\n        raise ValueError(\"The CSV columns setting is empty.\")\n    fields = {\"customer\", \"store_branch\", \"required_date\", \"po_number\", \"qty\", \"stock_code\", \"price\"}\n    unknown = [k.strip() for k, _ in columns if k.strip() not in fields]\n    if unknown:\n        raise ValueError(\"The CSV columns setting names unknown fields: %s.\" % \", \".join(unknown))\n\n    def safe(text):\n        text = str(text)\n        return \"'\" + text if text[:1] in (\"=\", \"+\", \"-\", \"@\", \"\\t\", \"\\r\") else text\n\n    def cell(field, ln):\n        if field == \"qty\":\n            q = num(ln.get(\"qty\"))\n            if q is None:\n                return \"\"\n            return str(int(q)) if q.is_integer() else repr(q)\n        if field == \"price\":\n            p = num(ln.get(\"price\"))\n            return \"%.2f\" % p if p is not None else \"\"\n        if field == \"stock_code\":\n            return safe(ln.get(\"stock_code\", \"\"))\n        return safe(header_fields[field])\n\n    delimiter = setting(\"csv_delimiter\", \",\")\n    delim = \"\\t\" if delimiter == \"tab\" else delimiter\n    buf = io.StringIO()\n    writer = csv.writer(buf, delimiter=delim, lineterminator=\"\\r\\n\")\n    writer.writerow([label.strip() for _, label in columns])\n    for ln in lines:\n        writer.writerow([cell(field.strip(), ln) for field, _ in columns])\n\n    po = re.sub(r\"[^A-Za-z0-9._-]+\", \"_\", str(spec.get(\"po_number\") or \"order\")).strip(\"_\") or \"order\"\n    out = po + \".csv\"\n    encoding = \"utf-8-sig\" if setting(\"csv_bom\", True) else \"utf-8\"\n    with open(out, \"w\", encoding=encoding, newline=\"\") as fh:\n        fh.write(buf.getvalue())\n    summary = \"Order CSV ready for %s — PO %s, %d line%s.\" % (\n        account or customer_in, spec.get(\"po_number\") or \"(none)\", len(lines), \"\" if len(lines) == 1 else \"s\")\n    if problems:\n        summary += \" Unmapped or unchecked: \" + \" \".join(problems)\n    return {\"file\": out, \"output\": summary}",
+            "output_key": "build"
+          },
+          "instructions": "Map codes and the customer account, then write the Order CSV. Fails the order on any unmapped line when strict."
+        }
+      },
+      {
+        "id": "upload-1",
+        "type": "action",
+        "position": {
+          "x": 320,
+          "y": 600
+        },
+        "data": {
+          "label": "Write CSV to SharePoint",
+          "outcomes": [],
+          "config": {
+            "connector": "clane",
+            "action": "clane__storage_upload",
+            "params": {
+              "folder": "{{settings.output_folder}}",
+              "file": "{{build.file}}",
+              "conflict": "rename"
+            }
+          }
+        }
+      },
+      {
+        "id": "output-1",
+        "type": "output",
+        "position": {
+          "x": 320,
+          "y": 740
+        },
+        "data": {
+          "label": "Done",
+          "outcomes": [],
+          "config": {
+            "deliver_as": "message",
+            "from": [
+              "build.output"
+            ]
+          }
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "trigger-1",
+        "target": "parse-1",
+        "kind": "forward"
+      },
+      {
+        "id": "e2",
+        "source": "parse-1",
+        "target": "extract-1",
+        "kind": "forward"
+      },
+      {
+        "id": "e3",
+        "source": "extract-1",
+        "target": "build-1",
+        "kind": "forward"
+      },
+      {
+        "id": "e4",
+        "source": "build-1",
+        "target": "upload-1",
+        "kind": "forward"
+      },
+      {
+        "id": "e5",
+        "source": "upload-1",
+        "target": "output-1",
+        "kind": "forward"
+      }
+    ]
+  }
+}

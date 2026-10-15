@@ -1,0 +1,14 @@
+{
+  "format": 2,
+  "min_clane": "2026.10",
+  "workflows": ["po-order-to-csv"],
+  "requires": {
+    "connectors": [
+      {
+        "provider": "microsoft",
+        "capabilities": ["storage.read", "storage.write"],
+        "why": "Reads purchase orders from SharePoint and writes the order CSV back."
+      }
+    ]
+  }
+}

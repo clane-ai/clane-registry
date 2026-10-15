@@ -39,6 +39,7 @@ const TOP_LEVEL = new Set([
   '.github',
   'docs',
   'scripts',
+  'plugins',
   ...KIND_DIRS,
 ]);
 const MB = 1024 * 1024;
@@ -182,8 +183,9 @@ function checkConnector(item) {
  * steps/<node-id>.<ext> and prompts/<node-id>.md must equal the node's code / prompt.
  * @param {{ path: string, files: string[], manifest: Record<string, unknown> }} item
  * @param {Map<string, RepoFile>} byRel
+ * @param {boolean} [byContent] a file named for no node still passes when some node's field equals it (plugin workflows)
  */
-function checkWorkflowSidecars(item, byRel) {
+function checkWorkflowSidecars(item, byRel, byContent = false) {
   const definition = /** @type {{ nodes: Array<{ id: string, data: { config: Record<string, unknown> } }> }} */ (
     item.manifest.definition
   );
@@ -193,13 +195,42 @@ function checkWorkflowSidecars(item, byRel) {
     const field = SIDECAR_DIRS[dir];
     if (!field || !file || rel.split('/').length !== 2) continue;
     const id = file.replace(/\.[^.]+$/, '');
-    const node = nodes.get(id);
+    const text = byRel.get(`${item.path}/${rel}`).bytes.toString('utf8').replace(/\r\n/g, '\n').replace(/\n$/, '');
+    const node = nodes.get(id) ?? (byContent ? [...nodes.values()].find((n) => n.data.config[field] === text) : undefined);
     if (!node) {
       fail(`${item.path}/${rel}: no node "${id}" in workflow.json`);
       continue;
     }
-    const text = byRel.get(`${item.path}/${rel}`).bytes.toString('utf8').replace(/\r\n/g, '\n').replace(/\n$/, '');
     if (node.data.config[field] !== text) fail(`${item.path}/${rel}: differs from node "${id}" ${field} in workflow.json`);
+  }
+}
+
+/**
+ * Workflows shipped inside a plugin (plugins/<name>/clane/workflows/<slug>/) are not in the
+ * catalogue; their steps/ and prompts/ copies must still equal the inlined workflow.json.
+ * @param {RepoFile[]} files
+ * @param {Map<string, RepoFile>} byRel
+ */
+function checkPluginWorkflows(files, byRel) {
+  const roots = files
+    .map((f) => /^(plugins\/[^/]+\/clane\/workflows\/[^/]+)\/workflow\.json$/.exec(f.rel))
+    .filter(Boolean)
+    .map((m) => m[1]);
+  for (const path of roots) {
+    let manifest;
+    try {
+      manifest = JSON.parse(byRel.get(`${path}/workflow.json`).bytes.toString('utf8'));
+    } catch (err) {
+      fail(`${path}/workflow.json: not valid JSON (${err.message})`);
+      continue;
+    }
+    if (!Array.isArray(manifest?.definition?.nodes)) {
+      fail(`${path}/workflow.json: definition.nodes is missing`);
+      continue;
+    }
+    const prefix = `${path}/`;
+    const own = files.filter((f) => f.rel.startsWith(prefix)).map((f) => f.rel.slice(prefix.length));
+    checkWorkflowSidecars({ path, files: own, manifest }, byRel, true);
   }
 }
 
@@ -247,6 +278,7 @@ async function main() {
   const catalogue = await catalogueOf(files);
   for (const broken of catalogue.broken) fail(`${broken.path}: ${broken.error}`);
   checkItems(catalogue, byRel);
+  checkPluginWorkflows(files, byRel);
 
   const previous = await loadPrevious(previousSpec);
   if (previous) checkVersionBumps(catalogue, previous);

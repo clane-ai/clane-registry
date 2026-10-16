@@ -227,7 +227,7 @@ def main():
         if isinstance(n_o, dict):
             md.append("Not an order (%s): %s" % (n_o.get("source") or "?", n_o.get("why") or ""))
     if files or not_orders:
-        with open("orders-summary.md", "w", encoding="utf-8") as fh:
+        with open("orders-summary.md", "w", encoding="utf-8", newline="\n") as fh:
             fh.write("\n".join(md).strip() + "\n")
         files.append("orders-summary.md")
 

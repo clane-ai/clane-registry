@@ -122,7 +122,7 @@ def main():
     for d in documents:
         body = "(scanned: read it with ocr_document)" if d["needs_ocr"] else d["text"]
         parts.append("## Document %s\n\n%s" % (d["file"], body))
-    with open(SOURCES, "w", encoding="utf-8") as fh:
+    with open(SOURCES, "w", encoding="utf-8", newline="\n") as fh:
         fh.write("\n\n".join(parts) + "\n")
     return {
         "output": "Read %d email%s and %d document%s; %d need OCR. Everything is in %s." % (

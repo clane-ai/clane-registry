@@ -1,0 +1,460 @@
+{
+  "name": "PO to Order CSV",
+  "version": "1.0.0",
+  "description": "Watches a SharePoint folder for purchase-order PDFs (text or scanned), extracts and self-checks each one, maps customer codes to your stock codes, skips a PO number it already handled, and writes an Order Form CSV to a second folder. Each PDF moves to Processed or Failed.",
+  "category": "operations",
+  "tags": [
+    "purchasing",
+    "purchase-order",
+    "ocr",
+    "extraction",
+    "csv",
+    "sharepoint"
+  ],
+  "settings": [
+    {
+      "name": "inbox",
+      "type": "folder",
+      "access": "read_write",
+      "label": "Purchase orders arrive in"
+    },
+    {
+      "name": "processed_folder",
+      "type": "folder",
+      "access": "write",
+      "same_drive_as": "inbox",
+      "label": "Move processed PDFs to"
+    },
+    {
+      "name": "failed_folder",
+      "type": "folder",
+      "access": "write",
+      "same_drive_as": "inbox",
+      "label": "Move failed PDFs to"
+    },
+    {
+      "name": "output_folder",
+      "type": "folder",
+      "access": "write",
+      "label": "Write order CSVs to"
+    },
+    {
+      "name": "code_mapping",
+      "type": "file",
+      "format": "csv",
+      "expected_columns": [
+        "customer",
+        "customer_code",
+        "stock_code"
+      ],
+      "label": "Stock code mapping"
+    },
+    {
+      "name": "customer_registry",
+      "type": "file",
+      "format": "csv",
+      "expected_columns": [
+        "customer_name",
+        "account_code"
+      ],
+      "label": "Customer accounts"
+    },
+    {
+      "name": "check_every",
+      "type": "schedule",
+      "default": {
+        "every_minutes": 5
+      },
+      "min_interval_minutes": 5,
+      "label": "Check for new orders"
+    },
+    {
+      "name": "strict",
+      "type": "boolean",
+      "default": true,
+      "required": false,
+      "label": "Fail an order with any unmapped line"
+    },
+    {
+      "name": "csv_columns",
+      "type": "text",
+      "required": false,
+      "label": "CSV columns",
+      "help": "Comma-separated field:Heading pairs, in file order. Fields: customer, store_branch, required_date, po_number, qty, stock_code, price.",
+      "default": "customer:Customer,store_branch:Store/Branch,required_date:Required Date,po_number:Customer Order Number,qty:Order Qty.,stock_code:Stock Code,price:Price"
+    },
+    {
+      "name": "csv_delimiter",
+      "type": "select",
+      "required": false,
+      "label": "CSV delimiter",
+      "default": ",",
+      "options": [
+        {
+          "value": ",",
+          "label": "Comma"
+        },
+        {
+          "value": ";",
+          "label": "Semicolon"
+        },
+        {
+          "value": "tab",
+          "label": "Tab"
+        }
+      ]
+    },
+    {
+      "name": "csv_date_format",
+      "type": "select",
+      "required": false,
+      "label": "Date format",
+      "default": "dd.mm.yy",
+      "options": [
+        {
+          "value": "dd.mm.yy",
+          "label": "21.10.26"
+        },
+        {
+          "value": "dd/mm/yyyy",
+          "label": "21/10/2026"
+        },
+        {
+          "value": "yyyy-mm-dd",
+          "label": "2026-10-21"
+        }
+      ]
+    },
+    {
+      "name": "csv_bom",
+      "type": "boolean",
+      "default": true,
+      "required": false,
+      "label": "Start the file with a byte order mark (Excel opens it cleanly)"
+    }
+  ],
+  "triggers": [
+    {
+      "name": "watch_inbox",
+      "kind": "folder_watch",
+      "source": "{{settings.inbox}}",
+      "pattern": "*.pdf",
+      "schedule": "{{settings.check_every}}",
+      "limits": {
+        "max_items_per_tick": 5,
+        "max_concurrent_runs": 1,
+        "max_file_mb": 25,
+        "run_timeout_minutes": 15
+      },
+      "after": {
+        "success": {
+          "move_to": "{{settings.processed_folder}}"
+        },
+        "failure": {
+          "move_to": "{{settings.failed_folder}}",
+          "write_reason": true
+        }
+      }
+    }
+  ],
+  "requires": {
+    "skills": [],
+    "connectors": [],
+    "tools": [
+      "python_exec"
+    ],
+    "roles": []
+  },
+  "definition": {
+    "version": "1.0",
+    "nodes": [
+      {
+        "id": "trigger-1",
+        "type": "trigger",
+        "position": {
+          "x": 320,
+          "y": 40
+        },
+        "data": {
+          "label": "PO arrives",
+          "outcomes": [],
+          "config": {
+            "output_key": "trigger"
+          },
+          "instructions": "A purchase-order PDF from the watched folder, staged into the working folder."
+        }
+      },
+      {
+        "id": "collect-1",
+        "type": "action",
+        "position": {
+          "x": 320,
+          "y": 180
+        },
+        "data": {
+          "label": "Read the purchase order",
+          "outcomes": [],
+          "config": {
+            "connector": "clane",
+            "action": "clane__read_documents",
+            "params": {
+              "output": "po-sources.md"
+            },
+            "output_key": "collect"
+          }
+        }
+      },
+      {
+        "id": "ocr-1",
+        "type": "action",
+        "position": {
+          "x": 320,
+          "y": 320
+        },
+        "data": {
+          "label": "Read scanned documents",
+          "outcomes": [],
+          "config": {
+            "connector": "clane",
+            "action": "clane__ocr",
+            "params": {
+              "files": "{{collect.needs_ocr}}"
+            },
+            "output_key": "ocr"
+          }
+        }
+      },
+      {
+        "id": "extract-1",
+        "type": "role",
+        "position": {
+          "x": 320,
+          "y": 460
+        },
+        "data": {
+          "label": "Extract + self-correct",
+          "outcomes": [],
+          "config": {
+            "prompt": "You are a purchase-order extractor. The `collect` and `ocr` channels above say where the purchase order's text is.\n\nStep 1 - read it. Call `file_read` on the file named in `collect.file` and read ALL of it. When the document is marked *(scanned: needs OCR)* there, also `file_read` each `output_file` in `ocr.documents` (`<name>.ocr.md`, written by Clane OCR in the step before you). Use no tool other than `file_read`; do not write or run code.\n\nStep 2 - reply with ONLY a single JSON object: your reply must START with `{` and END with `}`. No prose, no explanation, no thinking tags, no markdown fences. When the file holds several purchase orders, extract the first one and name the others in `note`.\n\nThe JSON has EXACTLY these keys:\n{\n  \"customer\": \"<the customer name/short code as shown on the PO>\",\n  \"store_branch\": <delivery branch/ship-to number or code, else null>,\n  \"required_date\": \"<delivery/required date as dd.mm.yy>\",\n  \"po_number\": \"<the customer order / purchase order number>\",\n  \"total\": <the PO's goods subtotal before VAT/delivery as a number, else null>,\n  \"note\": \"<self-correction notes (see rules)>\",\n  \"lines\": [ {\"qty\": <integer>, \"code\": \"<product code as printed>\", \"price\": <number>} ]\n}\n\nSelf-correct rules:\n1. For `code`, use the product code as printed on the PO (prefer the supplier code column when the PO shows one). A downstream step maps it to your own stock code via your code mapping, so do NOT guess a mapping.\n2. If a line has no product code, set \"code\": \"\" and name that line in `note`. NEVER invent a code.\n3. Compute Sum(qty x price) and compare to the PO's stated order/total value; say whether it matches in `note`.\n4. Normalise the date to dd.mm.yy.\nOutput ONLY the JSON object.",
+            "output_key": "extracted",
+            "max_tool_rounds": 4,
+            "max_output_tokens": 4000
+          },
+          "instructions": "Extract header + lines (code as printed), self-correct, emit JSON."
+        }
+      },
+      {
+        "id": "build-1",
+        "type": "code",
+        "position": {
+          "x": 320,
+          "y": 600
+        },
+        "data": {
+          "label": "Check the order",
+          "outcomes": [],
+          "config": {
+            "language": "python",
+            "code": "def main():\n    import csv, json, re\n    from clane import parse\n\n    def setting(name, default):\n        value = getattr(settings, name, default)\n        return default if value is None else value\n\n    raw = extracted.output or \"\"\n    raw = re.sub(r\"<thinking>.*?</thinking>\", \"\", raw, flags=re.S | re.I)\n    raw = raw.replace(\"```json\", \"\").replace(\"```\", \"\")\n    m = re.search(r\"\\{.*\\}\", raw, re.S)\n    if not m:\n        raise ValueError(\"The extraction returned no order data.\")\n    try:\n        spec = json.loads(m.group(0))\n    except ValueError:\n        raise ValueError(\"The extraction returned order data that could not be read.\")\n    if not isinstance(spec, dict):\n        raise ValueError(\"The extraction returned order data that could not be read.\")\n    strict = bool(setting(\"strict\", True))\n\n    def norm(s):\n        return re.sub(r\"\\s+\", \"\", str(s or \"\")).upper()\n\n    def rows_of(name, columns):\n        path = setting(name, None)\n        if not path:\n            return []\n        with open(path, encoding=\"utf-8-sig\", newline=\"\") as fh:\n            reader = csv.DictReader(fh)\n            missing = [c for c in columns if c not in (reader.fieldnames or [])]\n            if missing:\n                raise ValueError(\"The %s file is missing the column%s %s.\" % (\n                    name.replace(\"_\", \" \"), \"\" if len(missing) == 1 else \"s\", \", \".join(missing)))\n            return list(reader)\n\n    mapping = rows_of(\"code_mapping\", [\"customer\", \"customer_code\", \"stock_code\"])\n    registry = {}\n    for r in rows_of(\"customer_registry\", [\"customer_name\", \"account_code\"]):\n        registry[norm(r.get(\"customer_name\"))] = (r.get(\"account_code\") or \"\").strip()\n\n    customer_in = str(spec.get(\"customer\") or \"\")\n    known = {norm(r.get(\"customer\")) for r in mapping if norm(r.get(\"customer\"))} | {k for k in registry if k}\n    typed = norm(customer_in)\n    key = typed if typed in known else None\n    if key is None and typed:\n        inside = [k for k in known if k in typed]\n        key = max(inside, key=len) if inside else None\n\n    problems = []\n    lines = spec.get(\"lines\") or []\n    if not isinstance(lines, list) or not lines:\n        raise ValueError(\"The order has no lines.\")\n    if key is None:\n        problems.append(\"Customer '%s' is not in your stock code mapping or customer accounts.\" % customer_in)\n\n    lines_sum = 0.0\n    for i, ln in enumerate(lines, 1):\n        qty, price = parse.amount(ln.get(\"qty\")), parse.amount(ln.get(\"price\"))\n        code = norm(ln.get(\"code\"))\n        shown = ln.get(\"code\") or \"(blank)\"\n        ln[\"stock_code\"] = \"\"\n        if key is not None:\n            found = {(r.get(\"stock_code\") or \"\").strip() for r in mapping\n                     if norm(r.get(\"customer\")) == key and norm(r.get(\"customer_code\")) == code and code}\n            found.discard(\"\")\n            if len(found) > 1:\n                problems.append(\"Line %d code %s is mapped more than once.\" % (i, shown))\n            elif not found:\n                problems.append(\"Line %d code %s has no stock code mapping.\" % (i, shown))\n            else:\n                ln[\"stock_code\"] = found.pop()\n        if qty is None:\n            problems.append(\"Line %d has no valid quantity.\" % i)\n        if price is None:\n            problems.append(\"Line %d has no price.\" % i)\n        ln[\"qty\"], ln[\"price\"] = qty, price\n        lines_sum += (qty or 0.0) * (price or 0.0)\n\n    account = registry.get(key) if key is not None else None\n    if key is not None and not account:\n        problems.append(\"No account code for customer '%s' in the customer accounts file.\" % customer_in)\n\n    total = parse.amount(spec.get(\"total\"))\n    if total is not None and abs(total - lines_sum) > 0.005:\n        problems.append(\"The PO states an order total %.2f but the lines add up to %.2f.\" % (total, lines_sum))\n\n    required = parse.date(str(spec.get(\"required_date\") or \"\"))\n    if required is None:\n        problems.append(\"The required date '%s' is not a date.\" % (spec.get(\"required_date\") or \"\"))\n\n    if problems and strict:\n        raise ValueError(\" \".join(problems))\n\n    def fmt_date():\n        if required is None:\n            return str(spec.get(\"required_date\") or \"\")\n        year, month, day = (int(p) for p in required.split(\"-\"))\n        style = setting(\"csv_date_format\", \"dd.mm.yy\")\n        if style == \"dd/mm/yyyy\":\n            return \"%02d/%02d/%04d\" % (day, month, year)\n        if style == \"yyyy-mm-dd\":\n            return required\n        return \"%02d.%02d.%02d\" % (day, month, year % 100)\n\n    def money(value):\n        # Unit prices can carry more than 2 decimals (1.321); keep up to 4, never fewer than 2.\n        text = (\"%.4f\" % value).rstrip(\"0\")\n        return text + \"0\" * max(0, 2 - len(text.split(\".\")[1]))\n\n    fields = {\"customer\", \"store_branch\", \"required_date\", \"po_number\", \"qty\", \"stock_code\", \"price\"}\n    columns = [c.split(\":\", 1)[0].strip() for c in str(setting(\"csv_columns\", \"\")).split(\",\") if c.strip()]\n    unknown = [f for f in columns if f not in fields]\n    if unknown:\n        raise ValueError(\"The CSV columns setting names unknown fields: %s.\" % \", \".join(unknown))\n\n    po = str(spec.get(\"po_number\") or \"\")\n    header = {\n        \"customer\": account or customer_in,\n        \"store_branch\": str(spec.get(\"store_branch\") or \"\"),\n        \"required_date\": fmt_date(),\n        \"po_number\": po,\n    }\n    rows = [dict(header,\n                 qty=\"\" if ln[\"qty\"] is None else (\"%d\" % ln[\"qty\"] if ln[\"qty\"].is_integer() else repr(ln[\"qty\"])),\n                 stock_code=ln[\"stock_code\"],\n                 price=\"\" if ln[\"price\"] is None else money(ln[\"price\"]))\n            for ln in lines]\n\n    stem = re.sub(r\"[^A-Za-z0-9._-]+\", \"_\", po or \"order\").strip(\"_\") or \"order\"\n    summary = \"Order CSV ready for %s — PO %s, %d line%s.\" % (\n        account or customer_in, po or \"(none)\", len(lines), \"\" if len(lines) == 1 else \"s\")\n    if problems:\n        summary += \" Unmapped or unchecked: \" + \" \".join(problems)\n    return {\"rows\": rows, \"file\": stem + \".csv\", \"key\": \"po:\" + (norm(po) or stem), \"output\": summary}",
+            "output_key": "build"
+          },
+          "instructions": "Map codes and the customer account, then write the Order CSV. Fails the order on any unmapped line when strict."
+        }
+      },
+      {
+        "id": "dup-1",
+        "type": "action",
+        "position": {
+          "x": 320,
+          "y": 740
+        },
+        "data": {
+          "label": "Already seen?",
+          "outcomes": [],
+          "config": {
+            "connector": "clane",
+            "action": "clane__remember",
+            "params": {
+              "key": "{{build.key}}"
+            },
+            "output_key": "dup"
+          }
+        }
+      },
+      {
+        "id": "decide-dup",
+        "type": "router",
+        "position": {
+          "x": 320,
+          "y": 880
+        },
+        "data": {
+          "label": "Handled before?",
+          "outcomes": [
+            {
+              "id": "again",
+              "label": "Already handled",
+              "when": "dup.seen == true and dup.run_status != \"failed\""
+            },
+            {
+              "id": "new",
+              "label": "New order"
+            }
+          ],
+          "config": {
+            "decide": "rules",
+            "decision": {
+              "fallback": "new"
+            }
+          }
+        }
+      },
+      {
+        "id": "write-1",
+        "type": "action",
+        "position": {
+          "x": 320,
+          "y": 1020
+        },
+        "data": {
+          "label": "Write the order CSV",
+          "outcomes": [],
+          "config": {
+            "connector": "clane",
+            "action": "clane__write_table",
+            "params": {
+              "rows": "{{build.rows}}",
+              "columns": "{{settings.csv_columns}}",
+              "file": "{{build.file}}",
+              "delimiter": "{{settings.csv_delimiter}}",
+              "bom": "{{settings.csv_bom}}"
+            },
+            "output_key": "table"
+          }
+        }
+      },
+      {
+        "id": "upload-1",
+        "type": "action",
+        "position": {
+          "x": 320,
+          "y": 1160
+        },
+        "data": {
+          "label": "Save the CSV to the output folder",
+          "outcomes": [],
+          "config": {
+            "connector": "clane",
+            "action": "clane__storage_upload",
+            "params": {
+              "folder": "{{settings.output_folder}}",
+              "file": "{{table.file}}",
+              "conflict": "rename"
+            }
+          }
+        }
+      },
+      {
+        "id": "output-1",
+        "type": "output",
+        "position": {
+          "x": 320,
+          "y": 1300
+        },
+        "data": {
+          "label": "Done",
+          "outcomes": [],
+          "config": {
+            "deliver_as": "message",
+            "from": [
+              "build.output"
+            ]
+          }
+        }
+      },
+      {
+        "id": "handled-1",
+        "type": "output",
+        "position": {
+          "x": 640,
+          "y": 1020
+        },
+        "data": {
+          "label": "Already handled",
+          "outcomes": [],
+          "config": {
+            "deliver_as": "message",
+            "from": [
+              "dup.output",
+              "build.output"
+            ]
+          }
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "trigger-1",
+        "target": "collect-1",
+        "kind": "forward"
+      },
+      {
+        "id": "e2",
+        "source": "collect-1",
+        "target": "ocr-1",
+        "kind": "forward"
+      },
+      {
+        "id": "e3",
+        "source": "ocr-1",
+        "target": "extract-1",
+        "kind": "forward"
+      },
+      {
+        "id": "e4",
+        "source": "extract-1",
+        "target": "build-1",
+        "kind": "forward"
+      },
+      {
+        "id": "e5",
+        "source": "build-1",
+        "target": "dup-1",
+        "kind": "forward"
+      },
+      {
+        "id": "e6",
+        "source": "dup-1",
+        "target": "decide-dup",
+        "kind": "forward"
+      },
+      {
+        "id": "e7",
+        "source": "decide-dup",
+        "target": "write-1",
+        "kind": "forward",
+        "sourceHandle": "new"
+      },
+      {
+        "id": "e8",
+        "source": "decide-dup",
+        "target": "handled-1",
+        "kind": "forward",
+        "sourceHandle": "again"
+      },
+      {
+        "id": "e9",
+        "source": "write-1",
+        "target": "upload-1",
+        "kind": "forward"
+      },
+      {
+        "id": "e10",
+        "source": "upload-1",
+        "target": "output-1",
+        "kind": "forward"
+      }
+    ]
+  }
+}

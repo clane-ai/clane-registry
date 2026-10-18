@@ -1,0 +1,13 @@
+{
+  "name": "clane",
+  "owner": { "name": "Clane AI", "email": "hello@clane.ai" },
+  "description": "Claude Code plugins from Clane: build, test and publish Clane workflows.",
+  "plugins": [
+    {
+      "name": "clane-plugin",
+      "source": "./plugins/clane-plugin",
+      "description": "Build, test and publish Clane workflows from a prompt.",
+      "version": "0.2.0"
+    }
+  ]
+}

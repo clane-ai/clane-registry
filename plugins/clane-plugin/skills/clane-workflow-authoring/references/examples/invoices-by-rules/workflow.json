@@ -1,0 +1,279 @@
+{
+  "name": "Invoices by Rules",
+  "version": "0.1.0",
+  "description": "Routes each invoice with a Decision by rules, no model: an unknown PO is held for review, a total over the approval limit goes to a person, anything else is exported.",
+  "category": "finance",
+  "tags": [
+    "invoices",
+    "rules",
+    "decision",
+    "approval"
+  ],
+  "settings": [
+    {
+      "name": "approval_limit",
+      "type": "number",
+      "required": true,
+      "label": "Approval limit",
+      "help": "Invoices with a total above this need a person's approval.",
+      "default": 1000
+    },
+    {
+      "name": "known_pos",
+      "type": "text",
+      "required": false,
+      "label": "Known PO numbers",
+      "help": "Comma-separated purchase order numbers.",
+      "default": ""
+    }
+  ],
+  "triggers": [
+    {
+      "name": "invoice",
+      "kind": "webhook"
+    }
+  ],
+  "requires": {
+    "skills": [],
+    "connectors": [],
+    "tools": [
+      "python_exec"
+    ],
+    "roles": []
+  },
+  "definition": {
+    "version": "1.0",
+    "nodes": [
+      {
+        "id": "trigger-1",
+        "type": "trigger",
+        "position": {
+          "x": 320,
+          "y": 40
+        },
+        "data": {
+          "label": "Invoice arrives",
+          "outcomes": [],
+          "config": {
+            "output_key": "trigger"
+          },
+          "instructions": "JSON text: {\"supplier\": \"...\", \"po_number\": \"...\", \"total\": 1234.50}"
+        }
+      },
+      {
+        "id": "read-1",
+        "type": "code",
+        "position": {
+          "x": 320,
+          "y": 160
+        },
+        "data": {
+          "label": "Read the invoice",
+          "outcomes": [],
+          "config": {
+            "language": "python",
+            "code": "def main():\n    import json, re\n    raw = trigger.output or \"\"\n    m = re.search(r\"\\{.*\\}\", raw, re.S)\n    if not m:\n        raise ValueError(\"The invoice message holds no invoice data.\")\n    inv = json.loads(m.group(0))\n    known = {str(p).strip().upper() for p in str(getattr(settings, \"known_pos\", \"\") or \"\").split(\",\") if p.strip()}\n    po = str(inv.get(\"po_number\") or \"\").strip().upper()\n    total = float(inv.get(\"total\") or 0)\n    return {\"supplier\": inv.get(\"supplier\"), \"po_number\": po, \"total\": total, \"po_known\": po in known,\n            \"output\": \"Invoice %s from %s, total %.2f\" % (po or \"(no PO)\", inv.get(\"supplier\"), total)}\n",
+            "output_key": "invoice",
+            "inputs": [
+              {
+                "as": "trigger",
+                "from": "trigger.output"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "route-1",
+        "type": "router",
+        "position": {
+          "x": 320,
+          "y": 300
+        },
+        "data": {
+          "label": "Where does it go?",
+          "outcomes": [
+            {
+              "id": "review",
+              "label": "Unknown PO",
+              "when": "invoice.po_known == false"
+            },
+            {
+              "id": "approve",
+              "label": "Over the limit",
+              "when": "invoice.total > settings.approval_limit"
+            },
+            {
+              "id": "export",
+              "label": "Export"
+            }
+          ],
+          "config": {
+            "decide": "rules",
+            "decision": {
+              "fallback": "export"
+            }
+          }
+        }
+      },
+      {
+        "id": "human-1",
+        "type": "human",
+        "position": {
+          "x": 120,
+          "y": 460
+        },
+        "data": {
+          "label": "Approve the invoice",
+          "outcomes": [
+            {
+              "id": "approved",
+              "label": "Approved"
+            },
+            {
+              "id": "rejected",
+              "label": "Rejected"
+            }
+          ],
+          "config": {
+            "approver_role": "admin",
+            "due_hours": 48,
+            "require_reason": false
+          }
+        }
+      },
+      {
+        "id": "export-1",
+        "type": "code",
+        "position": {
+          "x": 320,
+          "y": 620
+        },
+        "data": {
+          "label": "Write the export row",
+          "outcomes": [],
+          "config": {
+            "language": "python",
+            "code": "def main():\n    line = \"%s,%s,%.2f\" % (invoice.supplier, invoice.po_number, invoice.total)\n    with open(\"export.csv\", \"w\", encoding=\"utf-8\", newline=\"\n\") as fh:\n        fh.write(\"supplier,po_number,total\n\" + line + \"\n\")\n    return {\"output\": \"Exported: \" + line}\n",
+            "output_key": "export",
+            "inputs": [
+              {
+                "as": "invoice",
+                "from": "invoice"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "done-1",
+        "type": "output",
+        "position": {
+          "x": 320,
+          "y": 780
+        },
+        "data": {
+          "label": "Exported",
+          "outcomes": [],
+          "config": {
+            "deliver_as": "message",
+            "from": [
+              "export.output"
+            ]
+          }
+        }
+      },
+      {
+        "id": "held-1",
+        "type": "output",
+        "position": {
+          "x": 620,
+          "y": 460
+        },
+        "data": {
+          "label": "Held for review",
+          "outcomes": [],
+          "config": {
+            "deliver_as": "message",
+            "from": [
+              "invoice.output"
+            ]
+          }
+        }
+      },
+      {
+        "id": "stopped-1",
+        "type": "output",
+        "position": {
+          "x": -80,
+          "y": 620
+        },
+        "data": {
+          "label": "Rejected",
+          "outcomes": [],
+          "config": {
+            "deliver_as": "message",
+            "from": [
+              "invoice.output"
+            ]
+          }
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "trigger-1",
+        "target": "read-1",
+        "kind": "forward"
+      },
+      {
+        "id": "e2",
+        "source": "read-1",
+        "target": "route-1",
+        "kind": "forward"
+      },
+      {
+        "id": "e3",
+        "source": "route-1",
+        "target": "held-1",
+        "kind": "forward",
+        "sourceHandle": "review"
+      },
+      {
+        "id": "e4",
+        "source": "route-1",
+        "target": "human-1",
+        "kind": "forward",
+        "sourceHandle": "approve"
+      },
+      {
+        "id": "e5",
+        "source": "route-1",
+        "target": "export-1",
+        "kind": "forward",
+        "sourceHandle": "export"
+      },
+      {
+        "id": "e6",
+        "source": "human-1",
+        "target": "export-1",
+        "kind": "forward",
+        "sourceHandle": "approved"
+      },
+      {
+        "id": "e7",
+        "source": "human-1",
+        "target": "stopped-1",
+        "kind": "forward",
+        "sourceHandle": "rejected"
+      },
+      {
+        "id": "e8",
+        "source": "export-1",
+        "target": "done-1",
+        "kind": "forward"
+      }
+    ]
+  }
+}

@@ -37,6 +37,7 @@ const TOP_LEVEL = new Set([
   '.gitattributes',
   '.gitignore',
   '.github',
+  '.claude-plugin',
   'docs',
   'scripts',
   'plugins',
@@ -64,7 +65,9 @@ const HTML_ELEMENTS = [
 const HTML_RE = new RegExp(`<!--|<\\/?(?:${HTML_ELEMENTS.join('|')})(?:\\s[^<>]*)?\\/?>`, 'i');
 const SIDECAR_DIRS = { steps: 'code', prompts: 'prompt' };
 /** Model prompts, not rendered documents: HTML in them is instruction text. */
-const PROMPT_FILE_RE = /^(roles\/[^/]+\/system_prompt\.md|workflows\/[^/]+\/prompts\/[^/]+\.md)$/;
+const PROMPT_FILE_RE = /^(roles\/[^/]+\/system_prompt\.md|(?:workflows|plugins\/[^/]+\/skills\/.+\/examples)\/[^/]+\/prompts\/[^/]+\.md)$/;
+/** Claude Code plugin skills (plugins/<name>/skills/<skill>/SKILL.md) live outside the Clane catalogue. */
+const PLUGIN_SKILL_RE = /^plugins\/[^/]+\/skills\/[^/]+\/SKILL\.md$/;
 /** A skill's requires_tools is documentation; the install plan resolves tools for roles and workflows only. */
 const TOOL_CHECKED_KINDS = new Set(['role', 'workflow']);
 
@@ -98,7 +101,7 @@ function checkLayout(files, symlinks) {
     const top = segments[0];
     if (!TOP_LEVEL.has(top)) fail(`${rel}: unexpected top-level entry "${top}"`);
     if (rel === 'SKILL.md') fail('SKILL.md at the repo root hides every skill from the skills CLI');
-    if (segments.at(-1) === 'SKILL.md' && top !== 'skills') fail(`${rel}: SKILL.md is only allowed under skills/`);
+    if (segments.at(-1) === 'SKILL.md' && top !== 'skills' && !PLUGIN_SKILL_RE.test(rel)) fail(`${rel}: SKILL.md is only allowed under skills/`);
     if (bytes.length > MAX_FILE_BYTES) fail(`${rel}: larger than 16 MB`);
     else if (bytes.length > MAX_BINARY_BYTES && !TEXT_EXT_RE.test(rel)) fail(`${rel}: binary larger than 5 MB`);
     if (!KIND_DIRS.has(top)) continue;
@@ -206,14 +209,15 @@ function checkWorkflowSidecars(item, byRel, byContent = false) {
 }
 
 /**
- * Workflows shipped inside a plugin (plugins/<name>/clane/workflows/<slug>/) are not in the
+ * Workflows shipped inside a plugin (plugins/<name>/clane/workflows/<slug>/, or a skill's
+ * worked examples under plugins/<name>/skills/<skill>/.../examples/<slug>/) are not in the
  * catalogue; their steps/ and prompts/ copies must still equal the inlined workflow.json.
  * @param {RepoFile[]} files
  * @param {Map<string, RepoFile>} byRel
  */
 function checkPluginWorkflows(files, byRel) {
   const roots = files
-    .map((f) => /^(plugins\/[^/]+\/clane\/workflows\/[^/]+)\/workflow\.json$/.exec(f.rel))
+    .map((f) => /^(plugins\/[^/]+\/(?:clane\/workflows|skills\/.+\/examples)\/[^/]+)\/workflow\.json$/.exec(f.rel))
     .filter(Boolean)
     .map((m) => m[1]);
   for (const path of roots) {

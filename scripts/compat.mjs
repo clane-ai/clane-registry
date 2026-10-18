@@ -5,7 +5,8 @@
  *   node scripts/compat.mjs [--require-skills-ref]
  *
  * 1. Runs the skills CLI in discovery-only mode (`npx skills add <repo> --list`, nothing
- *    is installed) and asserts it finds exactly the folders under skills/.
+ *    is installed) and asserts it finds exactly the folders under skills/, plus the skills
+ *    of the Claude Code plugins listed in .claude-plugin/marketplace.json.
  * 2. Runs the Agent Skills reference validator (`agentskills validate`, PyPI package
  *    skills-ref) on every skill. Clane keeps its own manifest fields (version, tags,
  *    requires_tools, ...) at the top level of the frontmatter, which the skills CLI and
@@ -13,7 +14,7 @@
  *    one finding is tolerated; every other finding fails the gate.
  */
 import { spawnSync } from 'node:child_process';
-import { readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { ROOT, parseArgs } from './lib/repo.mjs';
@@ -25,9 +26,19 @@ const ANSI_RE = /\u001b\[[0-9;?]*[A-Za-z]/g;
 /** @type {string[]} */
 const errors = [];
 
-const skillDirs = readdirSync(join(ROOT, 'skills'))
-  .filter((name) => statSync(join(ROOT, 'skills', name)).isDirectory())
-  .sort();
+/** @param {string} dir @returns {Array<[string, string]>} each sub-folder as [name, path] */
+const foldersIn = (dir) =>
+  existsSync(dir) ? readdirSync(dir).filter((n) => statSync(join(dir, n)).isDirectory()).map((n) => [n, join(dir, n)]) : [];
+
+/** The skills CLI also lists the skills of every plugin in .claude-plugin/marketplace.json. */
+const marketplace = join(ROOT, '.claude-plugin', 'marketplace.json');
+const pluginSkills = existsSync(marketplace)
+  ? JSON.parse(readFileSync(marketplace, 'utf8')).plugins.flatMap((p) => foldersIn(join(ROOT, p.source, 'skills')))
+  : [];
+const repoSkills = foldersIn(join(ROOT, 'skills'));
+const skillPaths = new Map([...repoSkills, ...pluginSkills]);
+if (skillPaths.size !== repoSkills.length + pluginSkills.length) errors.push('a plugin skill has the same name as a folder under skills/');
+const skillDirs = [...skillPaths.keys()].sort();
 
 /**
  * @param {string} cmd
@@ -64,7 +75,7 @@ function checkDiscovery() {
   const extra = found.filter((s) => !want.has(s));
   if (start === -1 || missing.length || extra.length || found.length !== skillDirs.length) {
     errors.push(
-      `skills CLI discovered ${found.length} skills, skills/ has ${skillDirs.length}` +
+      `skills CLI discovered ${found.length} skills, skills/ and the marketplace plugins have ${skillDirs.length}` +
         (missing.length ? `; not discovered: ${missing.join(', ')}` : '') +
         (extra.length ? `; unexpected: ${extra.join(', ')}` : ''),
     );
@@ -84,7 +95,7 @@ function checkReferenceValidator(required) {
   }
   let tolerated = 0;
   for (const slug of skillDirs) {
-    const { status, out } = run('agentskills', ['validate', join(ROOT, 'skills', slug)]);
+    const { status, out } = run('agentskills', ['validate', skillPaths.get(slug)]);
     if (status === 0) continue;
     const issues = out
       .split(/\r?\n/)

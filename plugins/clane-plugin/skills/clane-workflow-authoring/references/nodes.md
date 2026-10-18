@@ -58,6 +58,11 @@ rules: mapping, totals, what needs review. For amounts and dates inside it, use
 - What the approver is shown: the workflow name, the step's label, and the **text output
   of the last step before the gate**. Put what must be approved in that step's `output`.
   `review_key` is not read by the server or the machine runner; do not use it.
+- To show the approver what Clane suggests, have the step before the gate also return
+  `recommendation: {"verdict": "approve" | "reject", "reason": "<one sentence>"}` (a code
+  step returns it; an AI step lists `recommendation.verdict` and `recommendation.reason` in
+  `output_fields`). The Inbox shows it as "Clane suggests: Approve — <reason>". Any other
+  verdict, or no reason, shows nothing; the review text is never read for it.
 - `require_reason`: `true` needs a reason to approve and to reject; `false` never; left
   out, only a rejection needs one. The reason is stored with the approval record; it is
   **not** put on any channel.

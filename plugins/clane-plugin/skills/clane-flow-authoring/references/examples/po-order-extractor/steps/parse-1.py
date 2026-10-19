@@ -6,7 +6,7 @@ def main():
     cands = sorted(f for f in glob.glob("*")
                    if f.lower().endswith((".pdf", ".htm", ".html")))
     if not cands:
-        return {"error": "No PO file (.pdf/.htm) found in the working folder."}
+        raise ValueError("No PO file (.pdf/.htm) found in the working folder.")
     path = cands[0]
     if path.lower().endswith(".pdf"):
         text = ""

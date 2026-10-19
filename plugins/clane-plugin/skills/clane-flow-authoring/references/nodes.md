@@ -212,7 +212,7 @@ folder** (no `/`, `\` or `..`); anything else fails. A failed step stops the run
 `continue_on_error`. A param the step does not read is a `check` warning
 (`tool_param_unknown`) and, for Read documents and Write a table, a run-time failure.
 
-| Step | Runs | Credits | In `clane workflow test` |
+| Step | Runs | Credits | In `clane flow test` |
 |---|---|---|---|
 | Read documents | where the files are: the Clane Cloud code sandbox, or the machine's Clane Python runtime (the bytes never leave the machine) | 0 | always runs for real; a stub is ignored |
 | Write a table | same as Read documents | 0 | always runs for real; a stub is ignored |
@@ -267,7 +267,7 @@ up on the server, a provider error. On a machine not enrolled with `--allow-clou
 with *"This machine is not allowed to send documents to Clane OCR. Enrol it with
 --allow-cloud-ocr, or run this automation in Clane Cloud."*. With no files to send it succeeds empty.
 Each file sent from a machine shows in the run as *"Sent scan.pdf (2 pages) to Clane OCR"*.
-`clane workflow check --run-on machine` warns `ocr_sends_files` on every OCR step, and
+`clane flow check --run-on machine` warns `ocr_sends_files` on every OCR step, and
 `check` warns `ocr_unused` when Read documents marks scans that nothing reads.
 
 ### Write a table (`clane__write_table`)
@@ -320,7 +320,7 @@ with a Decision by rules, and let a retry through after a failure:
 and *"po:4471 was not remembered."*); it never fails on a missing key. Put it on the
 `rejected` branch of a human step so a rejected order can be sent again. Both fail on a
 missing or too-long key, and in a workflow that was never saved (*"Already seen? needs a
-saved workflow."*). In the Designer's Test run and in `clane workflow test --live-actions`
+saved workflow."*). In the Designer's Test run and in `clane flow test --live-actions`
 the key is really remembered under the workflow's slug.
 
 Pick the key from what makes the work unique. A customer who resends an order sends a new

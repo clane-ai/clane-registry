@@ -230,7 +230,22 @@
             "prompt": "You turn a customer email, and the documents attached to it, into sales orders for us, the supplier. The `collect` channel above says where everything is.\n\nStep 1 - read everything. Call `file_read` on the file named in `collect.file`, and read ALL of it (if it says it was cut short, read the rest). It holds the email text and the text of every document that has a text layer. A document marked *(scanned: needs OCR)* there was read by Clane OCR in the step before you.\n\nStep 2 - read the scanned documents. For EACH entry in `ocr.documents`, call `file_read` on its `output_file` (`<name>.ocr.md`) and read all of it. Skip this step when `ocr.documents` is empty. Use no tool other than `file_read`.\n\nStep 3 - find the orders:\n- Each purchase-order number is one order. A document (PDF, scan or HTML) is usually one order, but one file can hold several: when a page prints a different PO number, that page starts a new order. Read every page.\n- An email body is an order only when the customer asks us to supply goods in it. Reply threads quote older messages: the newest message is at the top, and a later message can change an earlier one (\"don't worry about the wallets\", \"make it 6 then\"). Apply those changes.\n- These are NOT orders: confirmations (\"thank you, confirmed\"), questions about collection or delivery times, our own replies, signatures, disclaimers. Report them under `not_orders`.\n- Keep each printed order line together. A line number groups its description, codes, quantity, unit, price and line total; text printed between two line numbers belongs to the line above it. Count the printed lines and return every one.\n\nStep 4 - reply with ONLY one JSON object, no prose and no code fences:\n{\n  \"orders\": [\n    {\n      \"source\": \"<file name, or 'email body'>\",\n      \"customer\": \"<the customer company name>\",\n      \"customer_email\": \"<sender email if known, else null>\",\n      \"po_number\": \"<the customer's order / PO number, else null>\",\n      \"store_branch\": \"<the ship-to / deliver-to branch or store as printed: its code when one is printed (Ship To Code, Location Code), else its name; else null>\",\n      \"order_date\": \"<dd.mm.yy, else null>\",\n      \"required_date\": \"<delivery / required date as dd.mm.yy, else null>\",\n      \"delivery_address\": \"<ship-to address on one line, else null>\",\n      \"total_net\": <goods total before VAT as printed, else null>,\n      \"printed_line_count\": <how many order lines the document prints, else null>,\n      \"lines\": [\n        {\n          \"line_no\": <the printed line number, else null>,\n          \"qty\": <number>,\n          \"uom\": \"<unit as written, e.g. EA, BX, RL, pallet, else null>\",\n          \"customer_code\": \"<the customer's own part / material number, else null>\",\n          \"supplier_code\": \"<OUR code as printed: 'Supplier Ref', 'Supplier Item', 'Vendor item', 'Supplier code', or a code in the description such as POLYBAG00011, CDW003622, SBP19; else null>\",\n          \"description\": \"<item description>\",\n          \"price\": <unit price as a number, else null>,\n          \"line_total\": <the printed line total as a number, else null>\n        }\n      ],\n      \"questions\": [\"<ONLY what stops this order being entered as it stands: an unreadable or missing quantity, a line whose code you cannot tie to a product, a missing page, a request too vague to fulfil>\"],\n      \"notes\": [\"<anything else worth a glance: handwriting, odd dates, an address taken from a signature>\"]\n    }\n  ],\n  \"not_orders\": [ {\"source\": \"<file or 'email body'>\", \"why\": \"<one short sentence>\"} ]\n}\n\nRules:\n1. Copy codes exactly as printed. NEVER invent a code, a price, a quantity or a line. Use null when it is not there.\n2. Handwriting is not part of the order; mention it in `notes` only.\n3. Vague requests (\"enough to make the minimum order\", \"complete the original order\") are orders: record what is known and put what is missing in `questions`.\n4. Numbers: \"1,09\" means 1.09; \"2.877,60\" means 2877.60; \"2,775.50\" means 2775.50.\n5. Dates as dd.mm.yy. A date in the past is a note, not a question.",
             "output_key": "extracted",
             "max_tool_rounds": 4,
-            "max_output_tokens": 8000
+            "max_output_tokens": 8000,
+            "contract": {
+              "needs": [],
+              "produces": [
+                {
+                  "name": "orders",
+                  "type": "list",
+                  "description": "One entry per order found"
+                },
+                {
+                  "name": "not_orders",
+                  "type": "list",
+                  "description": "What was not an order, and why"
+                }
+              ]
+            }
           }
         }
       },
@@ -247,7 +262,32 @@
           "config": {
             "language": "python",
             "code": "def main():\n    import csv, hashlib, json, re\n    from clane import parse\n\n    def setting(name, default):\n        value = getattr(settings, name, default)\n        return default if value is None else value\n\n    raw = extracted.output or \"\"\n    raw = re.sub(r\"<thinking>.*?</thinking>\", \"\", raw, flags=re.S | re.I)\n    raw = raw.replace(\"```json\", \"\").replace(\"```\", \"\")\n    m = re.search(r\"\\{.*\\}\", raw, re.S)\n    if not m:\n        raise ValueError(\"The extraction returned no order data.\")\n    try:\n        spec = json.loads(m.group(0))\n    except ValueError:\n        raise ValueError(\"The extraction returned order data that could not be read.\")\n    orders = spec.get(\"orders\") if isinstance(spec, dict) else None\n    if not isinstance(orders, list):\n        raise ValueError(\"The extraction returned order data that could not be read.\")\n    not_orders = [n for n in (spec.get(\"not_orders\") or []) if isinstance(n, dict)]\n\n    def norm(s):\n        return re.sub(r\"\\s+\", \"\", str(s or \"\")).upper()\n\n    def rows_of(name, columns):\n        path = setting(name, None)\n        if not path:\n            return []\n        with open(path, encoding=\"utf-8-sig\", newline=\"\") as fh:\n            reader = csv.DictReader(fh)\n            missing = [c for c in columns if c not in (reader.fieldnames or [])]\n            if missing:\n                raise ValueError(\"The %s file is missing the column%s %s.\" % (\n                    name.replace(\"_\", \" \"), \"\" if len(missing) == 1 else \"s\", \", \".join(missing)))\n            return list(reader)\n\n    mapping = {}\n    for r in rows_of(\"code_mapping\", [\"customer\", \"customer_code\", \"stock_code\"]):\n        mapping.setdefault((norm(r.get(\"customer\")), norm(r.get(\"customer_code\"))), set()).add(\n            (r.get(\"stock_code\") or \"\").strip())\n    registry = {norm(r.get(\"customer_name\")): (r.get(\"account_code\") or \"\").strip()\n                for r in rows_of(\"customer_registry\", [\"customer_name\", \"account_code\"])}\n    known = {c for c, _ in mapping} | set(registry)\n\n    def resolve_customer(name):\n        typed = norm(name)\n        if typed in known:\n            return typed\n        inside = [k for k in known if k and (k in typed or typed in k)] if typed else []\n        return max(inside, key=len) if inside else None\n\n    def fmt_date(iso, fallback):\n        if iso is None:\n            return str(fallback or \"\")\n        year, month, day = (int(p) for p in iso.split(\"-\"))\n        style = setting(\"csv_date_format\", \"dd.mm.yy\")\n        if style == \"dd/mm/yyyy\":\n            return \"%02d/%02d/%04d\" % (day, month, year)\n        if style == \"yyyy-mm-dd\":\n            return iso\n        return \"%02d.%02d.%02d\" % (day, month, year % 100)\n\n    def price_text(price):\n        if price is None:\n            return \"\"\n        text = (\"%.4f\" % price).rstrip(\"0\")\n        return text + \"0\" * max(0, 2 - len(text.split(\".\")[1]))\n\n    default_columns = (\"customer:Customer,store_branch:Store/Branch,required_date:Required Date,\"\n                       \"po_number:Customer Order Number,qty:Order Qty.,stock_code:Stock Code,price:Price\")\n    columns = [[f.strip(), h.strip()] for f, h in\n               (c.split(\":\", 1) for c in str(setting(\"csv_columns\", default_columns)).split(\",\") if \":\" in c)]\n    if not columns:\n        raise ValueError(\"The CSV columns setting is empty.\")\n    fields = {\"customer\", \"store_branch\", \"required_date\", \"po_number\", \"qty\", \"stock_code\", \"price\",\n              \"description\", \"customer_code\", \"uom\"}\n    unknown = [f for f, _ in columns if f not in fields]\n    if unknown:\n        raise ValueError(\"The CSV columns setting names unknown fields: %s.\" % \", \".join(unknown))\n\n    report, taken = [], set()\n    for idx, order in enumerate(orders, 1):\n        if not isinstance(order, dict):\n            continue\n        problems = [str(q) for q in (order.get(\"questions\") or []) if str(q).strip()]\n        notes = [str(q) for q in (order.get(\"notes\") or []) if str(q).strip()]\n        customer_in = str(order.get(\"customer\") or \"\")\n        key = resolve_customer(customer_in)\n        account = registry.get(key) if key else None\n        if registry and not account:\n            problems.append(\"Customer '%s' is not in the customer accounts file.\" % (customer_in or \"(unknown)\"))\n        po = str(order.get(\"po_number\") or \"\").strip()\n        if not po:\n            problems.append(\"No purchase order number.\")\n        required = parse.date(str(order.get(\"required_date\") or \"\"))\n        if order.get(\"required_date\") and required is None:\n            problems.append(\"The required date '%s' is not a date.\" % order.get(\"required_date\"))\n        header = {\n            \"customer\": account or customer_in,\n            \"store_branch\": str(order.get(\"store_branch\") or \"\").strip(),\n            \"required_date\": fmt_date(required, order.get(\"required_date\")),\n            \"po_number\": po,\n        }\n\n        rows, lines_sum, priced = [], 0.0, True\n        for i, ln in enumerate(order.get(\"lines\") or [], 1):\n            if not isinstance(ln, dict):\n                continue\n            qty = parse.amount(ln.get(\"qty\"))\n            price = parse.amount(ln.get(\"price\"))\n            supplier = str(ln.get(\"supplier_code\") or \"\").strip()\n            cust_code = str(ln.get(\"customer_code\") or \"\").strip()\n            found = set()\n            for code in (cust_code, supplier):\n                if key and code:\n                    found |= mapping.get((key, norm(code)), set())\n            found.discard(\"\")\n            if len(found) > 1:\n                problems.append(\"Line %d code %s is mapped more than once.\" % (i, cust_code or supplier))\n                stock = \"\"\n            else:\n                stock = found.pop() if found else supplier\n            label = ln.get(\"description\") or cust_code or supplier or \"line %d\" % i\n            if not stock:\n                problems.append(\"Line %d (%s) has no stock code.\" % (i, label))\n            if qty is None or qty <= 0:\n                problems.append(\"Line %d (%s) has no quantity.\" % (i, label))\n            if price is None:\n                priced = False\n            else:\n                lines_sum += (qty or 0.0) * price\n            printed = parse.amount(ln.get(\"line_total\"))\n            if qty is not None and price is not None and printed is not None:\n                if abs(qty * price - printed) > max(0.02, 0.005 * abs(printed)):\n                    problems.append(\"Line %d (%s): %s x %s = %.2f, but the printed line total is %.2f.\" % (\n                        i, label, (\"%g\" % qty), (\"%g\" % price), qty * price, printed))\n            rows.append(dict(header,\n                             qty=\"\" if qty is None else (\"%d\" % qty if qty.is_integer() else repr(qty)),\n                             price=price_text(price), stock_code=stock, customer_code=cust_code,\n                             description=str(ln.get(\"description\") or \"\"), uom=str(ln.get(\"uom\") or \"\")))\n        if not rows:\n            problems.append(\"No order lines.\")\n        count = parse.integer(order.get(\"printed_line_count\"))\n        if count is not None and rows and count != len(rows):\n            problems.append(\"The document prints %d lines but %d were read.\" % (count, len(rows)))\n        total = parse.amount(order.get(\"total_net\"))\n        if priced and rows and total is not None and abs(total - lines_sum) > 0.02:\n            problems.append(\"The order total is %.2f but the lines add up to %.2f.\" % (total, lines_sum))\n\n        stem = re.sub(r\"[^A-Za-z0-9._-]+\", \"_\", po or customer_in or \"order-%d\" % idx).strip(\"_\") or \"order-%d\" % idx\n        name = (\"REVIEW-\" if problems else \"\") + stem + \".csv\"\n        n = 1\n        while name in taken:\n            n += 1\n            name = (\"REVIEW-\" if problems else \"\") + \"%s-%d.csv\" % (stem, n)\n        taken.add(name)\n        report.append({\"file\": name, \"source\": order.get(\"source\"), \"customer\": customer_in, \"po_number\": po,\n                       \"lines\": len(rows), \"status\": \"needs review\" if problems else \"ready\",\n                       \"problems\": problems, \"notes\": notes, \"rows\": rows})\n\n    pos = sorted({norm(r[\"po_number\"]) for r in report if r[\"po_number\"]})\n    if pos:\n        key = \"po:\" + \"+\".join(pos)\n    else:\n        with open(collect.file, \"rb\") as fh:\n            key = \"text:\" + hashlib.sha256(fh.read()).hexdigest()[:20]\n\n    ready = sum(1 for r in report if r[\"status\"] == \"ready\")\n    if not report:\n        summary = \"No orders found. \" + \" \".join(\"%s: %s\" % (n.get(\"source\") or \"?\", n.get(\"why\") or \"\")\n                                                for n in not_orders)\n    else:\n        summary = \"%d order%s found: %d ready, %d need review (%s).\" % (\n            len(report), \"\" if len(report) == 1 else \"s\", ready, len(report) - ready,\n            \", \".join(\"PO %s\" % (r[\"po_number\"] or \"(none)\") for r in report))\n    return {\"orders\": report, \"not_orders\": not_orders, \"columns\": columns, \"key\": key[:500],\n            \"output\": summary.strip()}",
-            "output_key": "build"
+            "output_key": "build",
+            "contract": {
+              "needs": [],
+              "produces": [
+                {
+                  "name": "orders",
+                  "type": "list"
+                },
+                {
+                  "name": "not_orders",
+                  "type": "list"
+                },
+                {
+                  "name": "columns",
+                  "type": "list"
+                },
+                {
+                  "name": "key",
+                  "type": "text"
+                },
+                {
+                  "name": "output",
+                  "type": "text"
+                }
+              ]
+            }
           }
         }
       },
@@ -312,7 +352,21 @@
           "config": {
             "language": "python",
             "code": "def main():\n    import csv\n    from clane import parse\n\n    delimiter = getattr(settings, \"csv_delimiter\", None) or \",\"\n    bom = getattr(settings, \"csv_bom\", True) is not False\n    columns = [(c[0], c[1]) for c in build.columns]\n\n    files = []\n    for order in build.orders:\n        with open(order[\"file\"], \"w\", encoding=\"utf-8-sig\" if bom else \"utf-8\", newline=\"\") as fh:\n            writer = csv.writer(fh, delimiter=\"\\t\" if delimiter == \"tab\" else delimiter, lineterminator=\"\\r\\n\")\n            writer.writerow([heading for _, heading in columns])\n            for row in order[\"rows\"]:\n                writer.writerow([parse.guard(str(row.get(field) or \"\")) for field, _ in columns])\n        files.append(order[\"file\"])\n\n    md = [\"# Orders found\", \"\"]\n    for r in build.orders:\n        md.append(\"## %s: %s, PO %s (%s)\" % (r[\"status\"].upper(), r[\"customer\"] or \"(unknown customer)\",\n                                            r[\"po_number\"] or \"(none)\", r[\"source\"] or \"?\"))\n        md.append(\"File: %s. Lines: %d.\" % (r[\"file\"], r[\"lines\"]))\n        md.extend(\"- \" + p for p in r[\"problems\"])\n        md.extend(\"- Note: \" + n for n in r[\"notes\"])\n        md.append(\"\")\n    for n in build.not_orders:\n        md.append(\"Not an order (%s): %s\" % (n.get(\"source\") or \"?\", n.get(\"why\") or \"\"))\n    if files or build.not_orders:\n        with open(\"orders-summary.md\", \"w\", encoding=\"utf-8\", newline=\"\\n\") as fh:\n            fh.write(\"\\n\".join(md).strip() + \"\\n\")\n        files.append(\"orders-summary.md\")\n    tail = \" Files: %s.\" % \", \".join(files) if files else \"\"\n    return {\"files\": files, \"output\": build.output + tail}",
-            "output_key": "write"
+            "output_key": "write",
+            "contract": {
+              "needs": [],
+              "produces": [
+                {
+                  "name": "files",
+                  "type": "list",
+                  "description": "The order CSVs and orders-summary.md"
+                },
+                {
+                  "name": "output",
+                  "type": "text"
+                }
+              ]
+            }
           }
         }
       },
@@ -330,7 +384,22 @@
             "deliver_as": "message",
             "from": [
               "write.output"
-            ]
+            ],
+            "contract": {
+              "needs": [
+                {
+                  "name": "summary",
+                  "from": "write.output",
+                  "type": "text"
+                },
+                {
+                  "name": "files",
+                  "from": "write.files",
+                  "type": "list"
+                }
+              ],
+              "produces": []
+            }
           }
         }
       },
@@ -349,7 +418,17 @@
             "from": [
               "dup.output",
               "build.output"
-            ]
+            ],
+            "contract": {
+              "needs": [
+                {
+                  "name": "summary",
+                  "from": "build.output",
+                  "type": "text"
+                }
+              ],
+              "produces": []
+            }
           }
         }
       },
@@ -367,7 +446,17 @@
             "deliver_as": "message",
             "from": [
               "trigger.output"
-            ]
+            ],
+            "contract": {
+              "needs": [
+                {
+                  "name": "message",
+                  "from": "trigger.output",
+                  "type": "text"
+                }
+              ],
+              "produces": []
+            }
           }
         }
       }

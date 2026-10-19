@@ -22,7 +22,7 @@ with recorded events, on the same engine your customer's machines use.
 /clane-plugin:create When a customer emails a purchase order to orders@…, read the PDF, build one Order Form CSV per order and reply with it. Samples are in ./samples.
 ```
 
-The command writes the package, runs `clane workflow check` and `clane workflow test`, fixes
+The command writes the package, runs `clane flow check` and `clane flow test`, fixes
 what fails (at most 3 rounds each), and reports. The command ends with a draft in your
 customer's organisation; nothing runs until someone there switches it on.
 

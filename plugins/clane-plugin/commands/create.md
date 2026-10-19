@@ -8,14 +8,14 @@ argument-hint: "<what the workflow should do, and where the sample files are>"
 The builder asked for: $ARGUMENTS
 
 Work through these steps in order, and say which step you are on as you go. Use the skills
-`clane-workflow-authoring` and `clane-workflow-testing`. Every rule is checked by the `clane`
+`clane-flow-authoring` and `clane-flow-testing`. Every rule is checked by the `clane`
 CLI, so never try to bypass it.
 
 1. **Preflight.** Run `clane --version`. It must be 0.1.26 or newer; otherwise stop and tell
    the builder to update (`clane update`). Run `clane whoami`. If it fails, stop and tell
    them to run `clane login`. Say in one line who you will test as:
    "Testing as <email> on <server> — right?"
-   Ask which organisation the draft is for if the builder has not said (`clane workflow
+   Ask which organisation the draft is for if the builder has not said (`clane flow
    publish` lists the organisations you can build in when there is more than one). Confirm
    in one line: "Publishing a draft to **<Org>** as <email> — right?"
 2. **Understand.** Read the samples the builder named. If the prompt leaves the trigger kind
@@ -25,13 +25,13 @@ CLI, so never try to bypass it.
    `prompts/`, `tests/settings.json`, `README.md`. Turn each sample into a case under
    `tests/cases/<name>/` (testing skill). Prefer exact checks. Use graded statements only for
    what exact checks cannot say.
-4. **Check.** Run `clane workflow check <dir> --pack --json`. It prints one JSON object:
+4. **Check.** Run `clane flow check <dir> --pack --json`. It prints one JSON object:
    `{"ok": true|false, "problems": [{"code", "node_id", "message", "severity"}], "inlined": N}`,
    or `{"ok": false, "error": {"code", "message"}}` when it could not check at all (signed
    out, no organisation, server unreachable). Fix every problem with severity `error` and run
    it again. Stop after 3 rounds that still have problems, and show the builder the last list.
    An `error` object is not a package problem: stop and tell the builder (see exit codes).
-5. **Test.** Run `clane workflow test <dir> --json` and read the JSON it prints (it is also
+5. **Test.** Run `clane flow test <dir> --json` and read the JSON it prints (it is also
    saved to `<dir>/.clane/test-report.json`). If it has `problems` or `error` instead of
    `cases`, no new report was written: fix that first, and never read an older report file.
    For each failed expectation, decide whether to fix the step or fix the expectation
@@ -43,11 +43,14 @@ CLI, so never try to bypass it.
    for a person (add a decision to the case; remove the gate only if the builder did not ask for one) · 3 signed out, permission or policy
    (stop, tell the builder) · 4 server, gateway or model trouble (stop, tell the builder; do
    not loop) · 5 update `clane`.
-6. **Publish as a draft.** Run `clane workflow publish <dir> --draft --org <slug> --json`.
+6. **Publish as a draft.** Run `clane flow publish <dir> --draft --org <slug> --json`.
    Use `--allow-untested` only when the builder agrees the workflow has no sensible recorded
    event yet; the draft is then marked Untested. If it exits 1 with `error.code` `untested`,
    there is no passing report for these exact files, so test again. If it exits 1 with
    `error.code` `live`, a live workflow already has this name: tell the builder and stop. If
+   it exits 1 with `error.code` `stale` or `exists`, the server holds a version this folder
+   has not seen: tell the builder, and only on their word run `clane flow pull <slug>`,
+   merge, check, test and publish again (never `--force` unless they say to replace it). If
    it prints `problems` instead, the server found problems: fix them as in step 4. If it
    exits 3, the builder is not an owner, admin or builder there: stop and say so.
 7. **Summary.** Give the Definitions link (`url`), each automation's address

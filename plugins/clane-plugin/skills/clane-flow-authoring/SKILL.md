@@ -1,6 +1,6 @@
 ---
-name: clane-workflow-authoring
-description: Use when writing or editing a Clane workflow package (workflow.json, steps/, prompts/, settings, triggers) for a customer organisation. Covers the step vocabulary, settings and triggers, the code-step contract, AI step instructions and the package layout.
+name: clane-flow-authoring
+description: Use when writing or editing a Clane workflow package (workflow.json, steps/, prompts/, settings, triggers) for a customer organisation. Covers the step vocabulary, settings and triggers, the code-step contract, AI step instructions, the package layout and the loop (`clane flow init`, `check`, `test`, `try`, `publish`, `pull`).
 ---
 
 # Writing a Clane workflow package
@@ -12,16 +12,44 @@ A package is a folder:
 ├── workflow.json        name, version, description, settings[], triggers[], definition
 ├── steps/<step id>.py   review copy of each code step (also .js, .ts)
 ├── prompts/<step id>.md review copy of each AI step's instructions
-├── tests/               settings.json + cases/ (see clane-workflow-testing)
+├── tests/               settings.json + cases/ (see clane-flow-testing)
 └── README.md            what it does, settings to fill in, how it was tested
 ```
 
 The folder name is the workflow's slug: lower-case letters, digits and `-`.
 
+## The loop
+
+1. **Start.** A new package: `clane flow init <dir>` (its `workflow.json` names the server's
+   `$schema`, so the editor completes and underlines). A workflow that already exists on the
+   server: `clane flow pull <slug>` (writes the files, the published tests and
+   `.clane/published.json`, and says what changed). `clane flow schema <dir>` saves the org's
+   own schema, with its connector, role and model names, to `.clane/workflow.schema.json`.
+   A `flow.json` with `{ "org": "<slug>" }` in the repo saves `--org` on every command.
+2. **After every edit:** `clane flow check <dir> --pack --json`. Fix exactly what a problem
+   names, then check again. Never report a change as working without a clean check.
+3. **Recorded cases:** `clane flow test <dir> --json` (see clane-flow-testing).
+4. **Before saying "it works":** `clane flow try <dir>` once (`--on <machine>` for a
+   machine, `--case <name>` or `--input <file>` for the event). It publishes the draft, runs
+   it once as a test run, prints each step, saves the files to `.clane/try-runs/<run id>/`
+   and prints Clane's review and the run page. The run is the truth. Action steps use the
+   builder's real connectors. A live workflow is never tried in place: use
+   `--as <slug>-next`.
+5. **Publish:** `clane flow publish <dir> --draft --org <slug> --json`.
+6. **The 409 rule.** Publish sends the base recorded in `.clane/published.json`. `error.code`
+   `stale` means someone saved the workflow since (the Designer, or another CLI): run
+   `clane flow pull <slug>`, merge the change into what it wrote, check, test, publish again.
+   `exists` means the server holds this slug and it was never pulled here: pull first. Never
+   overwrite: use `--force` only when the builder says to replace what is on the server.
+
+The CLI is `clane` (Clane's own). If `clane --version` is below the floor in the plugin
+README, say so and stop; never install another `clane`. Change only what the ask names, and
+never weaken a test expectation silently.
+
 ## Rules
 
 - `workflow.json` is the only thing Clane runs. `steps/` and `prompts/` are copies for
-  review. Edit the copy, then run `clane workflow pack <dir>` (or `check --pack`), which
+  review. Edit the copy, then run `clane flow pack <dir>` (or `check --pack`), which
   writes it back into `config.code` / `config.prompt`. `check` fails when a copy and its
   step differ, or when a copy names no step.
 - A review copy is only `steps/<step id>.py`, `.js` or `.ts`, or `prompts/<step id>.md`.
@@ -35,7 +63,7 @@ The folder name is the workflow's slug: lower-case letters, digits and `-`.
 - Never put a password, token or key anywhere in the package. Apps are reached through
   connectors by name; Clane holds their credentials.
 - `foreach` runs only in Clane Cloud. Do not use it when the workflow will run on a
-  customer's machine. `clane workflow check <dir> --run-on machine` proves it can.
+  customer's machine. `clane flow check <dir> --run-on machine` proves it can.
 
 ## Code steps
 
@@ -95,7 +123,7 @@ and as `settings.<name>` in steps.
 
 ## Step vocabulary
 
-See `references/nodes.md`. `clane workflow <check|pack|test|publish> --help` prints the usage.
+See `references/nodes.md`. `clane flow <check|pack|test|publish> --help` prints the usage.
 
 ## Worked packages
 

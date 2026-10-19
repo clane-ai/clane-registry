@@ -125,9 +125,7 @@ def main():
     po = str(spec.get("po_number") or "order_form").strip().replace("/", "_")
     out = po + ".xlsx"
     wb.save(out)
-    # Return a human one-line summary (NOT a raw dict) so the workflow's final
-    # message reads as a sentence + the deliverable, not JSON.
     n = len(spec.get("lines", []))
     cust = spec.get("customer") or "the customer"
-    return "Order Form ready for %s - PO %s, %d line%s. Saved as %s." % (
-        cust, spec.get("po_number") or "(none)", n, "" if n == 1 else "s", out)
+    return {"file": out, "output": "Order Form ready for %s - PO %s, %d line%s. Saved as %s." % (
+        cust, spec.get("po_number") or "(none)", n, "" if n == 1 else "s", out)}

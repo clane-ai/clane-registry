@@ -36,7 +36,7 @@ An order with an unmapped line, a missing account code or a total that does not 
 
 ## How it was tested
 
-`clane workflow test` (machine runner) with real purchase orders. Clane OCR, Already seen? and the upload are recorded replies in each case's `stubs/`; the OCR stub carries the real Clane OCR text of the scan. Read documents and Write a table always run for real.
+`clane flow test` (machine runner) with real purchase orders. Clane OCR, Already seen? and the upload are recorded replies in each case's `stubs/`; the OCR stub carries the real Clane OCR text of the scan. Read documents and Write a table always run for real.
 
 | Case | PDF | Checks |
 |---|---|---|

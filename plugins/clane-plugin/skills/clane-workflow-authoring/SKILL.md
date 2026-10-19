@@ -47,11 +47,11 @@ It reads what earlier steps produced as local variables, named after the **chann
 | a step's output | its `config.output_key` if set, else its step id; every character that is not a letter or digit becomes `_` (`extract-1` is `extract_1`), and a leading digit becomes `_` |
 | the trigger | `trigger` (or the trigger's `output_key`): `trigger.output`, `trigger.payload`, `trigger.file` |
 | settings | `settings.<name>` |
-| a custom name | `config.inputs: [{"as": "po", "from": "extract.po_number"}]`; it wins over a channel of the same name |
+| a declared need | `config.contract.needs: [{"name": "po", "from": "extract.po_number", "type": "text"}]`; it wins over a channel of the same name |
 
-A channel is `{output, ...fields}`: `output` is the step's text, the fields are the keys of
-what a code step returned (or an AI step's `output_fields`). A step that returns a plain
-string has only `output`.
+A channel is `{output, ...fields}`: `output` is the step's text, the fields are the values
+the step's `contract.produces` declares (a code step returns them from `main()`). A step
+that returns a plain string has only `output`.
 
 Python: every object (nested ones too) is dot-accessible **and** behaves like a mapping:
 `x.k`, `x["k"]`, `x.get("k", d)`, `"k" in x`, `len(x)`, `x.keys()`, `x.items()`,
@@ -62,8 +62,9 @@ the field shadows the method). Node and Bash get plain JSON values (Bash: a JSON
 
 A channel from a branch that did not run is **not defined at all**: Python raises
 `NameError` (use `globals().get("x")`), and `{{x.y}}` in a template is empty. To get `None`
-instead, bind it: `inputs: [{"as": "x", "from": "x.output"}]` (a path that does not
-resolve binds `None`/`null`).
+instead, declare it as a need that is not required:
+`contract.needs: [{"name": "x", "from": "x.output", "type": "text", "required": false}]` (a
+path that does not resolve binds `None`/`null`).
 
 It returns a JSON-able dict, which becomes that step's output (`config.output_key`
 names it). It reads and writes files only in its working folder: the trigger's files are
@@ -79,8 +80,9 @@ inside a code step, `from clane import parse` (`parse.amount("2.280,00")` is `22
 ## AI steps
 
 An AI step (`type: "role"`) has `config.prompt`: bounded instructions saying what to read,
-what to produce, and in which fields (`config.output_fields` with `name` and
-`description`). Name the exact fields you want back. Do not ask it to "do everything".
+and what to produce. The values it hands on are its `config.contract.produces` (each with
+`name`, `type` and `description`; a table with its `columns`), and the engine holds it to
+them. Name the exact values you want back. Do not ask it to "do everything".
 See "AI step output and limits" in `references/nodes.md`: the prompt itself must ask for a
 JSON reply, and on a machine `max_tool_rounds` / `max_output_tokens` are not applied.
 Leave `config.model` unset unless the customer requires a model.

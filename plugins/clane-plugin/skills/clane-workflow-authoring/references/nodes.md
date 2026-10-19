@@ -3,15 +3,15 @@
 | type | What it does | config keys |
 |---|---|---|
 | `trigger` | Where the run's input enters. Exactly one. | `output_key` (default `trigger`) |
-| `role` | An AI step: the only free-form step. | `role_ref`, `prompt`, `model`, `tools`, `skills`, `max_tool_rounds` (1 to 200), `max_output_tokens`, `output_fields[{name, description, default}]`, `output_retries` (0 to 5), `output_key`, `inputs[{as, from}]` |
-| `code` | Deterministic Python / Node / Bash. | `language`, `code`, `output_key`, `inputs[{as, from}]`, `continue_on_error` |
-| `action` | Calls one tool of a connected app, or a built-in `clane` step (documents and data, storage). | `connector`, `action` (`<server>__<tool>`), `params` (strings may hold `{{step.path}}`), `output_key` |
+| `role` | An AI step: the only free-form step. | `role_ref`, `prompt`, `model`, `tools`, `skills`, `max_tool_rounds` (1 to 200), `max_output_tokens`, `contract` (required), `output_retries` (0 to 5), `output_key` |
+| `code` | Deterministic Python / Node / Bash. | `language`, `code`, `contract` (required), `output_key`, `continue_on_error` |
+| `action` | Calls one tool of a connected app, or a built-in `clane` step (documents and data, storage). | `connector`, `action` (`<server>__<tool>`), `params` (strings may hold `{{step.path}}`), `output_key`. No `contract`: a built-in step's is fixed, a connected app's reply is a record |
 | `router` | **Decision**: branches on a question. One outcome per branch. | `decide` (required: `rules` / `ai`), `outcomes[].when` (rules), `condition` (the question, `ai` only), `reads`, `decision` (`min_confidence` 0..1 for `ai`, `fallback` outcome id or `stop`). See "Rules" |
 | `validator` | A pass / fail gate. Outcomes `pass`, `fail`. | `condition` (the pass rule), `reads`, `output_schema`; both are checked when both are set. See "Rules" |
 | `loop` | Repeats with a hard cap. Outcomes `continue`, `done`. | `condition` (the continue rule), `max_iterations` (required) |
 | `foreach` | Maps over a list, in Clane Cloud only. | `items_from`, `item_as`, `concurrency`, `on_item_error` |
 | `human` | Waits for a person. Outcomes `approved`, `rejected`. | `approver_role`, `approver_user`, `due_hours`, `require_reason` (`review_key` does nothing); see "Human step" |
-| `output` | Deliver: the end. | `deliver_as` (`file` / `json` / `message`), `from` (outputs to include), `filename`, `format`, `summarise` |
+| `output` | Deliver: the end. | `deliver_as` (`file` / `json` / `message`), `from` (outputs to include), `filename`, `format`, `summarise`, `contract` (required: its `needs` are the workflow's result) |
 | `note` | A canvas note. Never runs. | none |
 
 A failed step stops the run unless that step sets `continue_on_error: true`.
@@ -30,15 +30,52 @@ delimiter, formula guard) or "did we do this before" checks. A code step is for 
 rules: mapping, totals, what needs review. For amounts and dates inside it, use
 `from clane import parse`.
 
+## Contract: what a step needs and produces
+
+**Every work step declares `contract.produces`; a table always has columns; the Deliver step
+declares the result.** Work steps are `role`, `code` and `output`. `check` refuses a workflow
+without them (`contract_missing`), and names a removed key (`removed_field`): `output_fields`,
+`inputs`, `contract.inputs` and `contract.outputs` are gone, with no alias.
+
+```json
+"contract": {
+  "needs":    [ { "name": "order", "from": "read.file", "type": "file" } ],
+  "produces": [
+    { "name": "lines", "type": "table", "description": "One row per order line",
+      "columns": [
+        { "name": "po_number",  "type": "text",   "required": true },
+        { "name": "sku",        "type": "text",   "required": true },
+        { "name": "quantity",   "type": "number", "required": true },
+        { "name": "unit_price", "type": "money" },
+        { "name": "line_total", "type": "money",  "required": true } ] },
+    { "name": "order_total", "type": "money", "description": "The total printed on the order" } ]
+}
+```
+
+- Types: `text`, `number`, `money` (a finite amount, at most 4 decimals), `date` (ISO),
+  `boolean`, `list`, `record`, `table` (a list of records, **with `columns`**) and `file` (a
+  file name in the run folder). A column is `{name, type, required?}` with type `text`,
+  `number`, `money`, `date` or `boolean`. No enums, patterns or nested schemas: put those in
+  a code step or a Decision by rules.
+- `needs` is what the step reads: `name` is the local it gets (a code step's variable),
+  `from` is `<key>.<field>` of an earlier step, `required` defaults to `true`. A `from` must
+  name a value an earlier step produces with a compatible type (`contract_from`).
+- `produces` is what the step must hand on. In Clane Cloud the step **fails** when a value is
+  missing or of the wrong type, when a required column is empty in any row (*"'Extract the
+  order lines' promised a table with a required line_total, but row 3 has none"*), or when a
+  file does not exist or is empty. A code step returns every produced value from `main()`;
+  an AI step is asked for exactly these values, so its prompt need not describe a JSON shape.
+- The Deliver step's `needs` are the result the person gets: each value, each table (rows,
+  columns and the sum of every number and money column) and each file, shown on the run.
+- When a person names a file's columns ("a CSV with PO number, SKU, quantity, unit price and
+  line total"), the step that finds the rows produces a table with exactly those columns, in
+  that order; Write a table takes them from it.
+
 ## AI step output and limits
 
-- `output_fields` do not make the model answer in JSON: **the prompt must ask for a JSON
-  reply** (a fenced ```json block, or an object at the end). On a machine, and so in
-  `clane workflow test`, the runner parses that object and puts its keys on the channel
-  beside `output`: `<key>.<name>`. If the reply is prose there are no fields, only
-  `<key>.output`. A dotted name (`manager.name`) means a nested object, so ask for
-  `{"manager": {"name": ...}}`. On a machine `description`, `default` and `output_retries`
-  are not used; in Clane Cloud a second extraction call fills the fields.
+- An AI step's channel holds `output` (its text) plus the values its contract produces:
+  `<key>.<name>`. In Clane Cloud a second extraction call fills them from the reply and is
+  re-asked up to `output_retries` times while the answer breaks the contract.
 - `max_tool_rounds` must be a whole number from 1 to 200: `0` is rejected by `check`
   (`Number must be greater than 0`). To give an AI step no tools, leave `tools` out and say
   in the prompt not to use tools; do not set `0`. On a machine an inline AI step always has
@@ -60,8 +97,8 @@ rules: mapping, totals, what needs review. For amounts and dates inside it, use
   `review_key` is not read by the server or the machine runner; do not use it.
 - To show the approver what Clane suggests, have the step before the gate also return
   `recommendation: {"verdict": "approve" | "reject", "reason": "<one sentence>"}` (a code
-  step returns it; an AI step lists `recommendation.verdict` and `recommendation.reason` in
-  `output_fields`). The Inbox shows it as "Clane suggests: Approve — <reason>". Any other
+  step returns it; an AI step declares `{"name": "recommendation", "type": "record"}` in
+  `contract.produces`). The Inbox shows it as "Clane suggests: Approve — <reason>". Any other
   verdict, or no reason, shows nothing; the review text is never read for it.
 - `require_reason`: `true` needs a reason to approve and to reject; `false` never; left
   out, only a rejection needs one. The reason is stored with the approval record; it is
@@ -169,7 +206,7 @@ A Decision by rules after Already seen? skips a duplicate: see "Documents and da
 
 Five built-in steps, `type: "action"`, `connector: "clane"`. Params may hold `{{step.path}}`;
 a param that is exactly one template passes the value itself, so a list or an object arrives
-intact (`"files": "{{collect.needs_ocr}}"`, `"rows": "{{build.rows}}"`). The reply is the
+intact (`"files": "{{collect.needs_ocr}}"`, `"rows": "{{extract.lines}}"`). The reply is the
 channel: each key a field, plus `output`. File names are **plain names in the run's working
 folder** (no `/`, `\` or `..`); anything else fails. A failed step stops the run unless
 `continue_on_error`. A param the step does not read is a `check` warning
@@ -237,8 +274,7 @@ Each file sent from a machine shows in the run as *"Sent scan.pdf (2 pages) to C
 
 | Param | Default | Meaning |
 |---|---|---|
-| `rows` | required | A list of records: `"{{build.rows}}"`. A nested value is written as JSON text. |
-| `columns` | required | `[{"field": "po", "heading": "PO"}]`, a list of field names, or the text `field:Heading,field:Heading` (what a `text` setting holds: `"{{settings.csv_columns}}"`). A field missing from a row is an empty cell and is listed once in `missing_fields`. |
+| `rows` | required | A table some step produces: `"{{extract.lines}}"`. Its declared columns are the file's columns, in order, each heading the column name in title case (`po_number` gives `Po Number`). There is no `columns` param. A nested value is written as JSON text. |
 | `file` | required | A plain name ending `.csv` or `.xlsx`. It overwrites a file of that name in the working folder. |
 | `format` | from the extension | `csv` or `xlsx`. |
 | `delimiter` | `,` | `,`, `;` or `tab`. CSV only. |
@@ -252,8 +288,10 @@ Numbers are written as numbers in XLSX and as Python `repr` in CSV (`3.5`, never
 format money and dates as text in the code step that builds the rows. One step writes one
 file. For several files in one run (an email with several orders), write them in the code
 step with `csv` and `parse.guard`: there is no `foreach` on a machine. It fails on: `rows`
-not a list of records (*"rows must be a list of records; got text."*), empty `columns`, an
-unknown `format` / `delimiter` / `line_ending`, more than 200000 rows or 50 MB.
+not a list of records (*"rows must be a list of records; got text."*), `rows` not bound to a
+table with columns (a `check` error), an unknown `format` / `delimiter` / `line_ending`, more
+than 200000 rows or 50 MB. A machine takes the columns from the table the same way, and
+reports the run's result (rows and sums) as Clane Cloud does.
 
 ### Already seen? (`clane__remember`) and Forget (`clane__forget`)
 

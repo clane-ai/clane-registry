@@ -12,7 +12,7 @@ with recorded events, on the same engine your customer's machines use.
 
 ## Prerequisites
 
-- `clane` 0.1.26 or newer (`clane --version`, `clane update`)
+- `clane` 0.1.27 or newer (`clane --version`, `clane update`)
 - Signed in: `clane login` (`clane whoami` shows who). Testing calls models through Clane on
   your own account. The test report shows the credits spent.
 

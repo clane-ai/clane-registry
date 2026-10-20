@@ -7,7 +7,7 @@
       "name": "clane-plugin",
       "source": "./plugins/clane-plugin",
       "description": "Build, test and publish Clane workflows from a prompt.",
-      "version": "0.2.0"
+      "version": "0.3.0"
     }
   ]
 }

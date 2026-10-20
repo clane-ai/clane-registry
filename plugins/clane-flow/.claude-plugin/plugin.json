@@ -1,0 +1,6 @@
+{
+  "name": "clane-flow",
+  "version": "0.4.0",
+  "description": "Clane Flow: build, test and publish Clane workflows from a prompt.",
+  "author": { "name": "Clane" }
+}

@@ -35,4 +35,4 @@ jobs:
         run: node scripts/compat.mjs --require-skills-ref
 
       - name: Claude Code plugin manifest
-        run: npx -y @anthropic-ai/claude-code@2.1.302 plugin validate --strict plugins/clane-plugin
+        run: npx -y @anthropic-ai/claude-code@2.1.302 plugin validate --strict plugins/clane-flow

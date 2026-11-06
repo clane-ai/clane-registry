@@ -16,13 +16,14 @@
 
 A failed step stops the run unless that step sets `continue_on_error: true`.
 
-The `clane` connector needs no connection. Its nine actions come in two groups:
+The `clane` connector needs no connection. Its ten actions come in three groups:
 - **Documents and data**: `clane__read_documents` (Read documents), `clane__ocr` (Read
   scanned documents), `clane__write_table` (Write a table), `clane__remember` (Already
   seen?) and `clane__forget` (Forget). See "Documents and data steps".
 - **Storage**, over the folders the installer chose: `clane__storage_list`,
   `clane__storage_download`, `clane__storage_upload` and `clane__storage_move`. Those folder
   params must be `{{settings.<folder>}}`. See "Storage actions".
+- **Web and APIs**: `clane__http` (Call an API). See "Call an API".
 
 Use these steps instead of writing the same thing in a code step: do not hand-write PDF,
 Word, Excel, HTML or `.eml` reading, OCR calls, CSV or Excel writing (byte order mark,
@@ -346,6 +347,33 @@ OCR and AI credits, but never writes a second set of files.
 
 Worked examples: `examples/orders-from-email` (Read documents, OCR, Already seen? on the PO
 numbers), `examples/orders-from-folder` (the same, plus Write a table).
+
+## Call an API (`clane__http`)
+
+One HTTP request, `type: "action"`, `connector: "clane"`. Use it instead of `urllib`,
+`requests` or `fetch` in a code step (`check` warns `code_http` on those). It runs in Clane
+Cloud; a machine run sends the step to Clane and gets the reply back. 0 credits. In
+`clane flow test` it is stubbed like any remote step (`stubs/<step id>.json` holding the
+reply, which may carry `files`); nothing is called without `--live-actions`.
+
+| Param | Default | Meaning |
+|---|---|---|
+| `method` | required | `GET POST PUT PATCH DELETE HEAD` |
+| `url` | required | `https://…` (plain `http://` is a `check` warning). May hold templates. |
+| `query`, `headers` | `{}` | Names and values; a list value repeats (`?id=1&id=2`), `null` drops. `Host`, `Content-Length`, `Transfer-Encoding`, `Cookie` are refused. |
+| `json` / `form` / `text` / `file` / `multipart` | none | The body; set at most one, none on `GET`/`HEAD`. `"json": "{{extract.lines}}"` sends the list. `file` and a multipart `{ "file": "<name>" }` part are plain names in the run folder (Clane Cloud runs only, for now). |
+| `content_type` | per body | Overrides the body's `Content-Type`. |
+| `accept` | `auto` | `auto`: JSON is parsed, text stays text, anything else (PDF, images, zip) is saved as a file; a JSON or text reply over 2 MB is saved as `response.json`/`response.txt`. `json`, `text`, `bytes` (always saved). |
+| `save_as` | none | Save the reply under this plain name instead. |
+| `max_mb` / `timeout_s` / `retries` | 50 / 30 / 2 | Reply cap; time per attempt; extra attempts on network errors, 408, 425, 429, 5xx (`Retry-After` honoured). `POST`/`PATCH` retry only on 429 and refused connections unless `idempotency_key` is set. |
+| `fail_on_error` | `true` | `false`: a non-2xx succeeds with `ok: false`, so a rules Decision can route on `status`. |
+
+Reply: `{status, ok, headers, body, file, url, attempts, duration_ms, bytes, output}`
+(`output`: *"POST /v2/quotes → 201 Created (412 ms)."*). Never put a key in a header, the
+query or the address: `check` refuses it (`http_literal_secret`). Stored keys (API
+connections, `"connection": "<name>"`) are not available yet; a step that names one fails.
+Clane Cloud does not call private, loopback or metadata addresses (`check` warns
+`http_private_host`); run such a workflow on a machine once machine-local calls ship.
 
 ## `clane.parse` in code steps
 

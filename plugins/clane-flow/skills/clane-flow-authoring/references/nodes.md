@@ -388,7 +388,10 @@ runs there. On a machine, a step **without** `connection` runs on the machine it
 own network (the LAN ERP, `localhost`); a step **with** `connection` is sent to Clane, which
 holds the key, and the reply comes back. 0 credits. In
 `clane flow test` it is stubbed like any remote step (`stubs/<step id>.json` holding the
-reply, which may carry `files`); nothing is called without `--live-actions`. In the Studio,
+reply: `status`, `headers`, `body`, `file`, plus `files` for a file reply; a non-2xx status
+fails the step as a live call would); nothing is called without `--live-actions`. A case
+asserts the request with `expect.sent` (method, path, headers, json/text/form body; never a
+credential), see the testing skill's `case.md`. In the Studio,
 the step's **Call it now** button sends the request for real, as the person editing, with
 their API connections: a `POST` or `DELETE` really happens.
 

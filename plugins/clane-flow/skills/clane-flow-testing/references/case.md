@@ -14,7 +14,10 @@
       { "path": "extracted.orders[0].po_number", "equals": "PO-4471" },
       { "path": "build.rows_written", "gte": 12 }
     ],
-    "graded": [ "Every order line in PO-4471.pdf appears once in PO-4471.csv with its quantity" ]
+    "graded": [ "Every order line in PO-4471.pdf appears once in PO-4471.csv with its quantity" ],
+    "sent": [
+      { "step": "quote-1", "method": "POST", "path": "/v2/quotes", "json": { "po": "PO-4471", "lines": 2 } }
+    ]
   }
 }
 ```
@@ -43,11 +46,33 @@
   | `exists` | `true`: the channel is set (a `null` value counts as set). `false`: it is not set. With no other check, `exists: true` is assumed |
 
 - `expect.graded[]`: plain statements a reader could check against the files.
+- `expect.sent[]`: what a Call an API (`clane__http`) step sent. `step` (its id, required) plus
+  any of the fields below; only the fields you name are compared. `clane flow check` refuses an
+  entry that names another kind of step, an unknown field or a credential header.
+
+  | Field | Passes when |
+  |---|---|
+  | `method` | the method matches (any case) |
+  | `path` | the address's path matches (`/v2/quotes`); with a `?`, path and query must both match (`/v2/quotes?dry=true`). The host is never compared |
+  | `headers` | each named header has exactly that value (names in any case). Never name `Authorization`, `Cookie` or any header holding a key, token, secret or password: credentials are never compared or written down |
+  | `json` | the JSON body is equal, nested values included (numbers by value; an extra or missing key fails) |
+  | `text` | the text body is equal |
+  | `form` | each named form field has that value (a list for a repeated name); other fields are ignored |
+
+  A failure names the first difference, for example
+  `json.po: expected "PO-4471", got "PO-4470"`. The request is checked whether the step was
+  stubbed or ran with `--live-actions`.
 - `stubs/<step id>.json`: the recorded reply for a connected-app step or a remote built-in
   step (Read scanned documents, Already seen?, Forget, storage). The whole file is the reply;
   an object may carry `files` (plain name to text), written into the working folder and left
   out of the channel. Read documents and Write a table are local and **never stubbed**: they
   run on the case's files. See the testing skill.
+- A Call an API stub is the reply: `status` (default 200), `headers`, `body`, `file`; `ok`, `url`,
+  `attempts` and `output` are filled in. A `file` reply needs its bytes in `files`
+  (`{ "label.pdf": { "base64": "…" } }`; text works too). A status outside 200-299 fails the step
+  exactly as a live call would (`HTTP 404 Not Found from GET /v2/quotes — …`), unless the step
+  has `fail_on_error: false`.
 
 Not supported: a per-case `settings` override, an assertion on error text, an assertion on
-which branch ran (use `exists` on a branch-only channel), a `not_equals`.
+which branch ran (use `exists` on a branch-only channel), a `not_equals`, an assertion on what
+a connected-app step (other than Call an API) was sent.

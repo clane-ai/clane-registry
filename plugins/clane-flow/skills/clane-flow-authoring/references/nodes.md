@@ -383,8 +383,10 @@ numbers), `examples/orders-from-folder` (the same, plus Write a table).
 ## Call an API (`clane__http`)
 
 One HTTP request, `type: "action"`, `connector: "clane"`. Use it instead of `urllib`,
-`requests` or `fetch` in a code step (`check` warns `code_http` on those). It runs in Clane
-Cloud; a machine run sends the step to Clane and gets the reply back. 0 credits. In
+`requests` or `fetch` in a code step (`check` warns `code_http` on those). In Clane Cloud it
+runs there. On a machine, a step **without** `connection` runs on the machine itself, on its
+own network (the LAN ERP, `localhost`); a step **with** `connection` is sent to Clane, which
+holds the key, and the reply comes back. 0 credits. In
 `clane flow test` it is stubbed like any remote step (`stubs/<step id>.json` holding the
 reply, which may carry `files`); nothing is called without `--live-actions`. In the Studio,
 the step's **Call it now** button sends the request for real, as the person editing, with
@@ -396,7 +398,7 @@ their API connections: a `POST` or `DELETE` really happens.
 | `url` | required | `https://…` (plain `http://` is a `check` warning). May hold templates. With `connection`, a path (`/v2/quotes`) continues the connection's address, and an absolute address must stay on its origin. |
 | `connection` | none | The name of an API connection (below). List it in `requires.connectors`. |
 | `query`, `headers` | `{}` | Names and values; a list value repeats (`?id=1&id=2`), `null` drops. `Host`, `Content-Length`, `Transfer-Encoding`, `Cookie` are refused. |
-| `json` / `form` / `text` / `file` / `multipart` | none | The body; set at most one, none on `GET`/`HEAD`. `"json": "{{extract.lines}}"` sends the list. `file` and a multipart `{ "file": "<name>" }` part are plain names in the run folder (Clane Cloud runs only, for now). |
+| `json` / `form` / `text` / `file` / `multipart` | none | The body; set at most one, none on `GET`/`HEAD`. `"json": "{{extract.lines}}"` sends the list. `file` and a multipart `{ "file": "<name>" }` part are plain names in the run folder (on a machine, only for a step without `connection`). |
 | `content_type` | per body | Overrides the body's `Content-Type`. |
 | `accept` | `auto` | `auto`: JSON is parsed, text stays text, anything else (PDF, images, zip) is saved as a file; a JSON or text reply over 2 MB is saved as `response.json`/`response.txt`. `json`, `text`, `bytes` (always saved). |
 | `save_as` | none | Save the reply under this plain name instead. |
@@ -419,8 +421,12 @@ the connection's origin, dropped when a redirect leaves that origin, and replace
 the reply, the error and the evidence. A connection must use `https://`. The step fails plainly
 when the name is unknown, the connection is switched off, or the name is a connected app
 rather than an API connection. A machine run that sends the step to Clane uses the same
-connection. Clane Cloud does not call private, loopback or metadata addresses (`check` warns
-`http_private_host`); run such a workflow on a machine once machine-local calls ship.
+connection, so it reaches only what Clane Cloud reaches. Clane Cloud does not call private,
+loopback or metadata addresses (`check` warns `http_private_host` for a cloud run); run such a
+workflow on a machine, with no `connection` on the step. A machine calls its LAN and
+`localhost`, but never link-local or cloud metadata addresses (`169.254.x.x`, `fe80::`,
+`metadata.google.internal`), checked again on every redirect. A machine sends no
+`Accept-Encoding` (the reply comes uncompressed).
 
 ## `clane.parse` in code steps
 

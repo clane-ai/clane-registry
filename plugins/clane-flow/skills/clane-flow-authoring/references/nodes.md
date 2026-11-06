@@ -3,18 +3,22 @@
 | type | What it does | config keys |
 |---|---|---|
 | `trigger` | Where the run's input enters. Exactly one. | `output_key` (default `trigger`) |
-| `role` | An AI step: the only free-form step. | `role_ref`, `prompt`, `model`, `tools`, `skills`, `max_tool_rounds` (1 to 200), `max_output_tokens`, `contract` (required), `output_retries` (0 to 5), `output_key` |
+| `role` | An AI step: the only free-form step. | `role_ref`, `prompt` (the step's instructions; required unless `role_ref` names a saved role), `model`, `tools`, `skills`, `max_tool_rounds` (1 to 200), `max_output_tokens`, `contract` (required), `output_retries` (0 to 5, Clane Cloud only), `output_key`, `continue_on_error` |
 | `code` | Deterministic Python / Node / Bash. | `language`, `code`, `contract` (required), `output_key`, `continue_on_error` |
-| `action` | Calls one tool of a connected app, or a built-in `clane` step (documents and data, storage). | `connector`, `action` (`<server>__<tool>`), `params` (strings may hold `{{step.path}}`), `output_key`. No `contract`: a built-in step's is fixed, a connected app's reply is a record |
-| `router` | **Decision**: branches on a question. One outcome per branch. | `decide` (required: `rules` / `ai`), `outcomes[].when` (rules), `condition` (the question, `ai` only), `reads`, `decision` (`min_confidence` 0..1 for `ai`, `fallback` outcome id or `stop`). See "Rules" |
-| `validator` | A pass / fail gate. Outcomes `pass`, `fail`. | `condition` (the pass rule), `reads`, `output_schema`; both are checked when both are set. See "Rules" |
+| `action` | Calls one tool of a connected app, or a built-in `clane` step (documents and data, storage). | `connector`, `action` (`<server>__<tool>`), `params` (strings may hold `{{step.path}}`), `output_key`, `continue_on_error`. No `contract`: a built-in step's is fixed, a connected app's reply is a record |
+| `router` | **Decision**: branches on a question. One outcome per branch. | `decide` (required: `rules` / `ai`), `outcomes[].when` (rules), `condition` (the question, `ai` only), `reads` (`ai` only: the values the model decides from; a rule names its own paths), `decision` (`min_confidence` 0..1 for `ai`, `fallback` outcome id or `stop`). See "Rules" |
+| `validator` | A pass / fail gate. Outcomes `pass`, `fail`. | `condition` (the pass rule), `output_schema`, `reads` (only `reads[0]`: the value `output_schema` checks); both are checked when both are set. See "Rules" |
 | `loop` | Repeats with a hard cap. Outcomes `continue`, `done`. | `condition` (the continue rule), `max_iterations` (required) |
 | `foreach` | Maps over a list, in Clane Cloud only. | `items_from`, `item_as`, `concurrency`, `on_item_error` |
-| `human` | Waits for a person. Outcomes `approved`, `rejected`. | `approver_role`, `approver_user`, `due_hours`, `require_reason` (`review_key` does nothing); see "Human step" |
-| `output` | Deliver: the end. | `deliver_as` (`file` / `json` / `message`), `from` (outputs to include), `filename`, `format`, `summarise`, `contract` (required: its `needs` are the workflow's result) |
+| `human` | Waits for a person. Outcomes `approved`, `rejected`. | `approver_role`, `approver_user`, `due_hours`, `require_reason` (`review_key`, `timeout_hours` and `escalate` do nothing; do not write them); see "Human step" |
+| `output` | Deliver: the end. | `deliver_as` (`file` / `json` / `message`), `from` (outputs to include), `filename`, `format`, `summarise` (`message` only: a short summary instead of the full text), `contract` (required: its `needs` are the workflow's result) |
 | `note` | A canvas note. Never runs. | none |
 
 A failed step stops the run unless that step sets `continue_on_error: true`.
+
+`data.instructions` is the step's **Notes**: a note for people on the canvas. Neither engine
+reads it as a task, so an AI step's task always goes in `prompt`. `check` fails an AI step
+with no `prompt` and no `role_ref` (`no_instructions`), whatever its notes say.
 
 The `clane` connector needs no connection. Its ten actions come in three groups:
 - **Documents and data**: `clane__read_documents` (Read documents), `clane__ocr` (Read

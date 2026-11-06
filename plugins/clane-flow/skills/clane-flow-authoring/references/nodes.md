@@ -42,7 +42,12 @@ files only when it needs them, so a skill costs almost nothing until it is used.
   skill named. Readiness shows it before you switch the workflow on.
 - A skill that belongs to one person (not published to the organisation) only works in that
   person's runs; readiness warns.
-- Skills run in Clane Cloud only for now: `check` refuses them on a machine (`skill_machine`).
+- Skills work in Clane Cloud and on a machine. A machine downloads each skill the first time a
+  run needs that version (so that first run needs the server) and reuses it after, offline too.
+  Run scripts from the folder `activate_skill` returns (`staged_path`), never a fixed path: it
+  differs between Clane Cloud and a machine.
+- A step can only pin (`@0.3.0`) the version the organisation has installed when it runs on a
+  machine; any other version fails the step there.
 - A skill never adds tools. When its scripts need `python_exec`, the step's `tools` must list it.
 
 ## Contract: what a step needs and produces
@@ -359,7 +364,8 @@ reply, which may carry `files`); nothing is called without `--live-actions`.
 | Param | Default | Meaning |
 |---|---|---|
 | `method` | required | `GET POST PUT PATCH DELETE HEAD` |
-| `url` | required | `https://…` (plain `http://` is a `check` warning). May hold templates. |
+| `url` | required | `https://…` (plain `http://` is a `check` warning). May hold templates. With `connection`, a path (`/v2/quotes`) continues the connection's address, and an absolute address must stay on its origin. |
+| `connection` | none | The name of an API connection (below). List it in `requires.connectors`. |
 | `query`, `headers` | `{}` | Names and values; a list value repeats (`?id=1&id=2`), `null` drops. `Host`, `Content-Length`, `Transfer-Encoding`, `Cookie` are refused. |
 | `json` / `form` / `text` / `file` / `multipart` | none | The body; set at most one, none on `GET`/`HEAD`. `"json": "{{extract.lines}}"` sends the list. `file` and a multipart `{ "file": "<name>" }` part are plain names in the run folder (Clane Cloud runs only, for now). |
 | `content_type` | per body | Overrides the body's `Content-Type`. |
@@ -370,9 +376,21 @@ reply, which may carry `files`); nothing is called without `--live-actions`.
 
 Reply: `{status, ok, headers, body, file, url, attempts, duration_ms, bytes, output}`
 (`output`: *"POST /v2/quotes → 201 Created (412 ms)."*). Never put a key in a header, the
-query or the address: `check` refuses it (`http_literal_secret`). Stored keys (API
-connections, `"connection": "<name>"`) are not available yet; a step that names one fails.
-Clane Cloud does not call private, loopback or metadata addresses (`check` warns
+query or the address: `check` refuses it (`http_literal_secret`); name an API connection
+instead.
+
+**API connections.** The key lives in Clane, under Connections → API connections (Name, the
+name used in workflows, Address, how it signs in: no key, bearer token, key in a header,
+user name and password, or key in the address; extra headers; a Test button). A step names it
+with `"connection": "carrier_api"` and lists it in `requires.connectors` (`check` errors
+`http_connection_undeclared` otherwise; readiness fails "not connected" until it exists and is
+on). Clane adds the key after the step's params are resolved, so it never enters params, the
+channel or the run page; the step cannot replace it with its own header; it is sent only to
+the connection's origin, dropped when a redirect leaves that origin, and replaced by `•••` in
+the reply, the error and the evidence. A connection must use `https://`. The step fails plainly
+when the name is unknown, the connection is switched off, or the name is a connected app
+rather than an API connection. A machine run that sends the step to Clane uses the same
+connection. Clane Cloud does not call private, loopback or metadata addresses (`check` warns
 `http_private_host`); run such a workflow on a machine once machine-local calls ship.
 
 ## `clane.parse` in code steps

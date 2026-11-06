@@ -30,6 +30,20 @@ delimiter, formula guard) or "did we do this before" checks. A code step is for 
 rules: mapping, totals, what needs review. For amounts and dates inside it, use
 `from clane import parse`.
 
+## Skills on an AI step
+
+An AI step can use Agent Skills (a folder with a `SKILL.md`): `"skills": ["xlsx"]`, or
+`"xlsx@0.3.0"` to name a version. The step sees one line per skill and opens the body and
+files only when it needs them, so a skill costs almost nothing until it is used.
+- List every skill the steps use in `requires.skills` (slugs, no version). `check` warns
+  (`requires_skills_stale`) when the two differ; the Studio fills it in on save.
+- A skill that is not installed for the organisation fails the step at run time, with the
+  skill named. Readiness shows it before you switch the workflow on.
+- A skill that belongs to one person (not published to the organisation) only works in that
+  person's runs; readiness warns.
+- Skills run in Clane Cloud only for now: `check` refuses them on a machine (`skill_machine`).
+- A skill never adds tools. When its scripts need `python_exec`, the step's `tools` must list it.
+
 ## Contract: what a step needs and produces
 
 **Every work step declares `contract.produces`; a table always has columns; the Deliver step
@@ -274,7 +288,8 @@ Each file sent from a machine shows in the run as *"Sent scan.pdf (2 pages) to C
 
 | Param | Default | Meaning |
 |---|---|---|
-| `rows` | required | A table some step produces: `"{{extract.lines}}"`. Its declared columns are the file's columns, in order, each heading the column name in title case (`po_number` gives `Po Number`). There is no `columns` param. A nested value is written as JSON text. |
+| `rows` | required | A table some step produces: `"{{extract.lines}}"`. Its declared columns are the file's columns, in order, each heading the column name in title case (`po_number` gives `Po Number`), unless `columns` names them. A nested value is written as JSON text. |
+| `columns` | the declared columns | `"field:Heading, field"`: which fields to write, in order, and each heading (a field alone keeps its own name, so `sku` stays `sku`). Use it when the receiving system needs exact headings (`SKU`, `invoice_number`). |
 | `file` | required | A plain name ending `.csv` or `.xlsx`. It overwrites a file of that name in the working folder. |
 | `format` | from the extension | `csv` or `xlsx`. |
 | `delimiter` | `,` | `,`, `;` or `tab`. CSV only. |

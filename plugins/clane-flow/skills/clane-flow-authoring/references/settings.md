@@ -11,8 +11,9 @@ or api key), `label`, optional `help` and `required`, and a `type`:
 `0 18 L * *` is 18:00 on the last day of every month).
 
 A key or password is never a setting. A web service's key is an API connection the person
-adds under Connections → API connections; the workflow names it in a Call an API step's
-`connection` and in `requires.connectors` (see "Call an API" in `nodes.md`).
+adds under Connections → API connections, or, for a key that must stay on one machine, with
+`clane worker api add` on that machine; the workflow names it in a Call an API step's
+`connection` and in `requires.connectors` either way (see "Call an API" in `nodes.md`).
 
 `triggers[]`: each has `name` (lower_snake_case) and `kind`: `email` | `webhook` |
 `folder_watch` | `schedule`. A `folder_watch` needs `source: "{{settings.<folder>}}"` and

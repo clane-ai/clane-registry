@@ -385,8 +385,9 @@ numbers), `examples/orders-from-folder` (the same, plus Write a table).
 One HTTP request, `type: "action"`, `connector: "clane"`. Use it instead of `urllib`,
 `requests` or `fetch` in a code step (`check` warns `code_http` on those). In Clane Cloud it
 runs there. On a machine, a step **without** `connection` runs on the machine itself, on its
-own network (the LAN ERP, `localhost`); a step **with** `connection` is sent to Clane, which
-holds the key, and the reply comes back. 0 credits. In
+own network (the LAN ERP, `localhost`), and so does a step whose `connection` the machine
+holds itself (below); any other step **with** `connection` is sent to Clane, which holds the
+key, and the reply comes back. 0 credits. In
 `clane flow test` it is stubbed like any remote step (`stubs/<step id>.json` holding the
 reply: `status`, `headers`, `body`, `file`, plus `files` for a file reply; a non-2xx status
 fails the step as a live call would); nothing is called without `--live-actions`. A case
@@ -426,10 +427,25 @@ when the name is unknown, the connection is switched off, or the name is a conne
 rather than an API connection. A machine run that sends the step to Clane uses the same
 connection, so it reaches only what Clane Cloud reaches. Clane Cloud does not call private,
 loopback or metadata addresses (`check` warns `http_private_host` for a cloud run); run such a
-workflow on a machine, with no `connection` on the step. A machine calls its LAN and
+workflow on a machine, with no `connection` on the step or one the machine holds. A machine calls its LAN and
 `localhost`, but never link-local or cloud metadata addresses (`169.254.x.x`, `fe80::`,
 `metadata.google.internal`), checked again on every redirect. A machine sends no
 `Accept-Encoding` (the reply comes uncompressed).
+
+**A connection the machine holds.** A LAN ERP's key that must never reach Clane Cloud is
+kept on the machine: someone on it runs `clane worker api add erp --url https://erp.local:8443
+--auth bearer` (or `basic` for `user:password`, `header:X-Api-Key`, `query:api_key`; add
+`--no-keychain` for a service running as another account) and types the key; it goes to the
+OS keychain, the name and address to `worker.json`, and the worker (after a restart) offers
+the name, never the key. The workflow is written the same way, `"connection": "erp"` and
+`requires.connectors: ["erp"]`; the manifest never says where the key lives. When Clane Cloud
+has no API connection by that name, the run is placed on a machine that holds it (one that
+does not is not eligible, "does not hold the API connection *erp*"), and readiness counts it
+connected for a workflow that runs on that machine ("erp: held by Office PC"). On the machine
+the same rules apply: added after params, sent only to its origin (`http://` only for
+`localhost`), dropped on a redirect off it, `•••` everywhere it could be read back.
+`clane worker api list` shows what the machine holds; `clane worker api remove erp` forgets
+it and its key.
 
 ## `clane.parse` in code steps
 

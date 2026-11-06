@@ -1,0 +1,140 @@
+{
+  "name": "Invoices with a Skill",
+  "version": "0.1.0",
+  "description": "Reads each supplier invoice into fields with an AI step that follows a skill shipped inside this package (skills/invoice-fields), so the house rules for invoice numbers, dates and totals travel with the workflow.",
+  "category": "finance",
+  "tags": [
+    "invoices",
+    "extraction",
+    "skills"
+  ],
+  "settings": [],
+  "triggers": [
+    {
+      "name": "invoice",
+      "kind": "webhook"
+    }
+  ],
+  "requires": {
+    "skills": [
+      "invoice-fields"
+    ],
+    "connectors": [],
+    "tools": [],
+    "roles": []
+  },
+  "definition": {
+    "version": "1.0",
+    "nodes": [
+      {
+        "id": "trigger-1",
+        "type": "trigger",
+        "position": {
+          "x": 320,
+          "y": 40
+        },
+        "data": {
+          "label": "Invoice arrives",
+          "outcomes": [],
+          "config": {
+            "output_key": "trigger"
+          },
+          "instructions": "The invoice as text."
+        }
+      },
+      {
+        "id": "read-1",
+        "type": "role",
+        "position": {
+          "x": 320,
+          "y": 180
+        },
+        "data": {
+          "label": "Read the invoice",
+          "outcomes": [],
+          "config": {
+            "prompt": "Activate the skill invoice-fields and follow it. The invoice text is in `trigger.output`.\n\nReply with ONLY one JSON object, no prose and no code fences:\n{\"supplier\": \"...\", \"invoice_number\": \"...\", \"invoice_date\": \"yyyy-mm-dd\", \"total\": 0.0, \"currency\": \"EUR\"}",
+            "skills": [
+              "invoice-fields"
+            ],
+            "output_key": "invoice",
+            "max_tool_rounds": 4,
+            "max_output_tokens": 2000,
+            "contract": {
+              "needs": [],
+              "produces": [
+                {
+                  "name": "supplier",
+                  "type": "text"
+                },
+                {
+                  "name": "invoice_number",
+                  "type": "text"
+                },
+                {
+                  "name": "invoice_date",
+                  "type": "date"
+                },
+                {
+                  "name": "total",
+                  "type": "money"
+                },
+                {
+                  "name": "currency",
+                  "type": "text"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "done-1",
+        "type": "output",
+        "position": {
+          "x": 320,
+          "y": 340
+        },
+        "data": {
+          "label": "Invoice read",
+          "outcomes": [],
+          "config": {
+            "deliver_as": "message",
+            "from": [
+              "invoice.invoice_number"
+            ],
+            "contract": {
+              "needs": [
+                {
+                  "name": "invoice_number",
+                  "from": "invoice.invoice_number",
+                  "type": "text"
+                },
+                {
+                  "name": "total",
+                  "from": "invoice.total",
+                  "type": "money"
+                }
+              ],
+              "produces": []
+            }
+          }
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "trigger-1",
+        "target": "read-1",
+        "kind": "forward"
+      },
+      {
+        "id": "e2",
+        "source": "read-1",
+        "target": "done-1",
+        "kind": "forward"
+      }
+    ]
+  }
+}

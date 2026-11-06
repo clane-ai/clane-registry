@@ -127,7 +127,7 @@ See `references/nodes.md`. `clane flow <check|pack|test|publish> --help` prints 
 
 ## Worked packages
 
-`references/examples/` holds five packages:
+`references/examples/` holds six packages:
 - `orders-from-email`: an email or a webhook in, orders typed in the body or sent as PDF,
   scanned or HTML documents out as Order Form CSV files. Read documents, then Read scanned
   documents, before the AI step; Already seen? on the PO numbers and a Decision by rules
@@ -140,6 +140,8 @@ See `references/nodes.md`. `clane flow <check|pack|test|publish> --help` prints 
 - `invoices-by-rules`: a Decision by rules (unknown PO, over the limit, else export) with a
   human approval step; no model
 - `po-order-extractor`: the minimal five-step version
+- `invoices-with-a-skill`: an AI step that follows a skill shipped inside the package
+  (`skills/invoice-fields/`); see "A skill inside the package" in `references/nodes.md`
 
 The order examples use the built-in steps for reading, OCR, files and duplicates; their code
 steps hold only the business rules (stock code mapping, totals, what needs review).

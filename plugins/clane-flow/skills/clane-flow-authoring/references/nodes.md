@@ -50,6 +50,33 @@ files only when it needs them, so a skill costs almost nothing until it is used.
   machine; any other version fails the step there.
 - A skill never adds tools. When its scripts need `python_exec`, the step's `tools` must list it.
 
+### A skill inside the package
+
+A package can carry its own skills: `skills/<slug>/SKILL.md`, with `references/`, `scripts/`
+and `assets/` beside it (the Anthropic layout). A step names a bundled skill by its slug like
+any other. See `examples/invoices-with-a-skill`.
+
+```
+my-workflow/
+├── workflow.json
+├── skills/
+│   └── invoice-fields/
+│       ├── SKILL.md          name: invoice-fields, version: 0.1.0
+│       └── references/labels.md
+└── prompts/ steps/ tests/
+```
+
+- `SKILL.md` frontmatter: `name` equal to the folder name (lowercase letters, digits,
+  hyphens), `description` (under 1024 characters), `version` as `x.y.z`. `check` refuses a
+  missing or bad one (`skill_manifest`), refuses a name Clane already ships
+  (`skill_slug_taken`: rename yours), and warns when no step names it (`skill_unused`).
+- `publish` uploads `skills/` with the draft, and the server installs each one as an
+  organisation skill. Change a skill, then bump its `version`: the same version with
+  different content is refused. The same content again is a no-op.
+- The skill then belongs to the organisation: other workflows can name it, and it can be
+  edited in Build → Skills.
+- `pull` brings `skills/` back with the tests. The credential rules cover `skills/` too.
+
 ## Contract: what a step needs and produces
 
 **Every work step declares `contract.produces`; a table always has columns; the Deliver step

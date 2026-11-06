@@ -359,7 +359,9 @@ One HTTP request, `type: "action"`, `connector: "clane"`. Use it instead of `url
 `requests` or `fetch` in a code step (`check` warns `code_http` on those). It runs in Clane
 Cloud; a machine run sends the step to Clane and gets the reply back. 0 credits. In
 `clane flow test` it is stubbed like any remote step (`stubs/<step id>.json` holding the
-reply, which may carry `files`); nothing is called without `--live-actions`.
+reply, which may carry `files`); nothing is called without `--live-actions`. In the Studio,
+the step's **Call it now** button sends the request for real, as the person editing, with
+their API connections: a `POST` or `DELETE` really happens.
 
 | Param | Default | Meaning |
 |---|---|---|

@@ -3,7 +3,7 @@
 | type | What it does | config keys |
 |---|---|---|
 | `trigger` | Where the run's input enters. Exactly one. | `output_key` (default `trigger`) |
-| `role` | An AI step: the only free-form step. | `role_ref`, `prompt` (the step's instructions; required unless `role_ref` names a saved role), `model`, `tools`, `skills`, `max_tool_rounds` (1 to 200), `max_output_tokens`, `contract` (required), `output_retries` (0 to 5, Clane Cloud only), `output_key`, `continue_on_error` |
+| `role` | An AI step: the only free-form step. | `role_ref`, `agent` (the inline agent: `system_prompt` is the step's instructions, required unless `role_ref` names a saved role; also `model`, `tools`, `skills`, `max_tool_rounds` (1 to 200), `max_output_tokens`), `contract` (required), `output_retries` (0 to 5, Clane Cloud only), `output_key`, `continue_on_error` |
 | `code` | Deterministic Python / Node / Bash. | `language`, `code`, `contract` (required), `output_key`, `continue_on_error` |
 | `action` | Calls one tool of a connected app, or a built-in `clane` step (documents and data, storage). | `connector`, `action` (`<server>__<tool>`), `params` (strings may hold `{{step.path}}`), `output_key`, `continue_on_error`. No `contract`: a built-in step's is fixed, a connected app's reply is a record |
 | `router` | **Decision**: branches on a question. One outcome per branch. | `decide` (required: `rules` / `ai`), `outcomes[].when` (rules), `condition` (the question, `ai` only), `reads` (`ai` only: the values the model decides from; a rule names its own paths), `decision` (`min_confidence` 0..1 for `ai`, `fallback` outcome id or `stop`). See "Rules" |
@@ -17,8 +17,11 @@
 A failed step stops the run unless that step sets `continue_on_error: true`.
 
 `data.instructions` is the step's **Notes**: a note for people on the canvas. Neither engine
-reads it as a task, so an AI step's task always goes in `prompt`. `check` fails an AI step
-with no `prompt` and no `role_ref` (`no_instructions`), whatever its notes say.
+reads it as a task, so an AI step's task always goes in `agent.system_prompt`. `check` fails
+an AI step with no `agent.system_prompt` and no `role_ref` (`no_instructions`), whatever its
+notes say. `prompt`, `model`, `tools`, `skills`, `max_tool_rounds` and `max_output_tokens`
+directly under `config` are removed: `check` names each one (`removed_field`); move it under
+`config.agent`.
 
 The `clane` connector needs no connection. Its ten actions come in three groups:
 - **Documents and data**: `clane__read_documents` (Read documents), `clane__ocr` (Read
@@ -37,7 +40,7 @@ rules: mapping, totals, what needs review. For amounts and dates inside it, use
 
 ## Skills on an AI step
 
-An AI step can use Agent Skills (a folder with a `SKILL.md`): `"skills": ["xlsx"]`, or
+An AI step can use Agent Skills (a folder with a `SKILL.md`): `"agent": {"skills": ["xlsx"]}`, or
 `"xlsx@0.3.0"` to name a version. The step sees one line per skill and opens the body and
 files only when it needs them, so a skill costs almost nothing until it is used.
 - List every skill the steps use in `requires.skills` (slugs, no version). `check` warns
@@ -52,7 +55,7 @@ files only when it needs them, so a skill costs almost nothing until it is used.
   differs between Clane Cloud and a machine.
 - A step can only pin (`@0.3.0`) the version the organisation has installed when it runs on a
   machine; any other version fails the step there.
-- A skill never adds tools. When its scripts need `python_exec`, the step's `tools` must list it.
+- A skill never adds tools. When its scripts need `python_exec`, the step's `agent.tools` must list it.
 
 ### A skill inside the package
 
@@ -127,13 +130,13 @@ without them (`contract_missing`), and names a removed key (`removed_field`): `o
 - An AI step's channel holds `output` (its text) plus the values its contract produces:
   `<key>.<name>`. In Clane Cloud a second extraction call fills them from the reply and is
   re-asked up to `output_retries` times while the answer breaks the contract.
-- `max_tool_rounds` must be a whole number from 1 to 200: `0` is rejected by `check`
-  (`Number must be greater than 0`). To give an AI step no tools, leave `tools` out and say
+- `agent.max_tool_rounds` must be a whole number from 1 to 200: `0` is rejected by `check`
+  (`Number must be greater than 0`). To give an AI step no tools, leave `agent.tools` out and say
   in the prompt not to use tools; do not set `0`. On a machine an inline AI step always has
   the four file tools (`file_read`, `file_write`, `file_glob`, `file_grep`) plus whatever
-  `tools` names.
-- `max_output_tokens` is a positive whole number. Clane Cloud applies it and
-  `max_tool_rounds`; the machine runner does not read either, so do not rely on them in a
+  `agent.tools` names.
+- `agent.max_output_tokens` is a positive whole number. Clane Cloud applies it and
+  `agent.max_tool_rounds`; the machine runner does not read either, so do not rely on them in a
   test.
 
 ## Human step

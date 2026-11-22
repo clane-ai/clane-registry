@@ -50,7 +50,7 @@ never weaken a test expectation silently.
 
 - `workflow.json` is the only thing Clane runs. `steps/` and `prompts/` are copies for
   review. Edit the copy, then run `clane flow pack <dir>` (or `check --pack`), which
-  writes it back into `config.code` / `config.prompt`. `check` fails when a copy and its
+  writes it back into `config.code` / `config.agent.system_prompt`. `check` fails when a copy and its
   step differ, or when a copy names no step.
 - A review copy is only `steps/<step id>.py`, `.js` or `.ts`, or `prompts/<step id>.md`.
   Other files in those folders are ignored. A Bash code step has no review copy: keep its
@@ -107,13 +107,14 @@ inside a code step, `from clane import parse` (`parse.amount("2.280,00")` is `22
 
 ## AI steps
 
-An AI step (`type: "role"`) has `config.prompt`: bounded instructions saying what to read,
+An AI step (`type: "role"`) has `config.agent.system_prompt`: bounded instructions saying what to read,
 and what to produce. The values it hands on are its `config.contract.produces` (each with
 `name`, `type` and `description`; a table with its `columns`), and the engine holds it to
 them. Name the exact values you want back. Do not ask it to "do everything".
 See "AI step output and limits" in `references/nodes.md`: the prompt itself must ask for a
-JSON reply, and on a machine `max_tool_rounds` / `max_output_tokens` are not applied.
-Leave `config.model` unset unless the customer requires a model.
+JSON reply, and on a machine `agent.max_tool_rounds` / `agent.max_output_tokens` are not applied.
+`model`, `tools`, `skills` and both limits also live under `config.agent`, never directly
+under `config` (`check` refuses those as `removed_field`). Leave `agent.model` unset unless the customer requires a model.
 
 ## Settings and triggers
 

@@ -2,7 +2,7 @@
 
 An AI step that follows a skill shipped inside the package. The skill lives in
 `skills/invoice-fields/` (the Anthropic layout: `SKILL.md` plus `references/`), and the step
-names it by its slug: `"skills": ["invoice-fields"]`.
+names it by its slug: `"agent": {"skills": ["invoice-fields"]}`.
 
 ## What happens
 

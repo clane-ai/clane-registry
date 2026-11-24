@@ -2,13 +2,24 @@
 
 `settings[]`: each has `name` (lower_snake_case, never containing secret, password, token
 or api key), `label`, optional `help` and `required`, and a `type`:
-`folder` (`access`: read | write | read_write), `file` (`format`: csv | xlsx | json | txt,
+`folder` (`access`: read | write | read_write), `machine_folder` (same `access`), `file` (`format`: csv | xlsx | json | txt,
 `expected_columns`), `text` (`default`, `pattern`, `max_length`), `number` (`min`, `max`,
 `integer`, `default`), `select` (`options[{value, label}]`, `default`), `boolean`
 (`default`), `schedule` (`default`: `{ every_minutes }` or `{ cron, tz }`). `every_minutes` must be one of
 5, 6, 10, 12, 15, 20, 30, 60, 120, 180, 240, 360, 480, 720, 1440; `every_minutes` runs in UTC.
 `cron` is a 5-field expression parsed with `cron-parser`, which accepts `L` (so
 `0 18 L * *` is 18:00 on the last day of every month).
+
+**Where it runs decides the folder type.** A workflow that runs in the cloud (no `run_on`, or
+`"run_on": { "kind": "cloud" }`) uses `folder` settings: cloud storage such as SharePoint or
+OneDrive. A workflow that runs on a customer's machine has
+`"run_on": { "kind": "label", "label": "<pool>" }` (the worker's `--label`) and uses
+`machine_folder` settings (`access` as for `folder`; no `same_drive_as`). Their value is the
+name of a folder the worker shares (`clane serve --jobs --folder "<name>=<path>[:rw]"`),
+optionally `<name>/<sub-folder>`, never a drive path. Writing needs the worker folder to be
+`:rw`. Mixing the two never works: a `folder` setting on a machine workflow can only be pointed
+at cloud storage, so the person sees no machine folders. Check with
+`clane flow check <dir> --run-on machine`.
 
 A key or password is never a setting. A web service's key is an API connection the person
 adds under Connections → API connections, or, for a key that must stay on one machine, with

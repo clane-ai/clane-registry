@@ -48,14 +48,13 @@ clane serve --jobs --install-service --user-level --label <pool> --parallel <1-1
   (`\\server\share`) instead.
 - `--parallel` is how many runs at once (1 to 16, default 1).
 
-### Company machine, by invite
+### A server that must run when nobody is signed in
 
-An admin opens **Agents → Invite a machine** and gets a code. On the machine, in an
-Administrator PowerShell:
+From an Administrator PowerShell, sign in as above, then install it as a Windows service
+under a service account (password in `CLANE_SERVICE_PASSWORD`):
 
 ```
-$env:CLANE_JOIN_CODE = '<code>'
-clane serve --jobs --install-service --label <pool> --parallel <n> --folder "<name>=<path>"
+clane serve --jobs --install-service --service-user .\clane-worker --label <pool> --parallel <n> --folder "<name>=<path>"
 ```
 
 ## 4. Manage it

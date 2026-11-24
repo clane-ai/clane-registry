@@ -12,9 +12,13 @@ with recorded events, on the same engine your customer's machines use.
 
 ## Prerequisites
 
-- `clane` 0.1.27 or newer (`clane --version`, `clane update`)
+- `clane` 0.1.57 or newer (`irm https://clane.sh/install.ps1 | iex`, then `clane --version`)
 - Signed in: `clane login` (`clane whoami` shows who). Testing calls models through Clane on
   your own account. The test report shows the credits spent.
+- To run workflows on a machine: a worker started with
+  `clane serve --jobs --install-service --user-level --label <pool> --folder "<name>=<path>[:rw]"`.
+  The `clane-flow-machine` skill covers setup and fixes ("Select folder" empty, "already
+  running", wrong server); ask Claude Code about it.
 
 ## Use
 
@@ -23,7 +27,8 @@ with recorded events, on the same engine your customer's machines use.
 ```
 
 The command writes the package, runs `clane flow check` and `clane flow test`, fixes
-what fails (at most 3 rounds each), and reports. The command ends with a draft in your
+what fails (at most 3 rounds each), tries it once on your worker with `clane flow try --on`
+when it uses machine folders, and reports. The command ends with a draft in your
 customer's organisation; nothing runs until someone there switches it on.
 
 Developing the plugin: `claude --plugin-dir C:\git\clane-registry\plugins\clane-flow`.

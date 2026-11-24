@@ -8,11 +8,13 @@ argument-hint: "<what the workflow should do, and where the sample files are>"
 The builder asked for: $ARGUMENTS
 
 Work through these steps in order, and say which step you are on as you go. Use the skills
-`clane-flow-authoring` and `clane-flow-testing`. Every rule is checked by the `clane`
+`clane-flow-authoring`, `clane-flow-testing` and, for anything about installing `clane`,
+signing in, the worker or its folders, `clane-flow-machine`. Every rule is checked by the `clane`
 CLI, so never try to bypass it.
 
-1. **Preflight.** Run `clane --version`. It must be 0.1.26 or newer; otherwise stop and tell
-   the builder to update (`clane update`). Run `clane whoami`. If it fails, stop and tell
+1. **Preflight.** Run `clane --version`. It must be 0.1.57 or newer; otherwise stop and tell
+   the builder to update (`clane update`, or see `clane-flow-machine` if an old copy is
+   first on PATH). Run `clane whoami`. If it fails, stop and tell
    them to run `clane login`. Say in one line who you will test as:
    "Testing as <email> on <server> — right?"
    Ask which organisation the draft is for if the builder has not said (`clane flow
@@ -20,7 +22,9 @@ CLI, so never try to bypass it.
    in one line: "Publishing a draft to **<Org>** as <email> — right?"
 2. **Understand.** Read the samples the builder named. If the prompt leaves the trigger kind
    (email, webhook, folder watch, schedule), the deliverable, or who receives it unclear, ask
-   at most three short questions. Otherwise go on.
+   at most three short questions. If it reads or writes files on a machine, ask for the
+   worker's label and folder names unless you already know them; folder steps use those
+   names, never paths. Otherwise go on.
 3. **Author.** Write the package folder (authoring skill): `workflow.json`, `steps/`,
    `prompts/`, `tests/settings.json`, `README.md`. Turn each sample into a case under
    `tests/cases/<name>/` (testing skill). Prefer exact checks. Use graded statements only for
@@ -43,7 +47,10 @@ CLI, so never try to bypass it.
    for a person (add a decision to the case; remove the gate only if the builder did not ask for one) · 3 signed out, permission or policy
    (stop, tell the builder) · 4 server, gateway or model trouble (stop, tell the builder; do
    not loop) · 5 update `clane`.
-6. **Publish as a draft.** Run `clane flow publish <dir> --draft --org <slug> --json`.
+6. **Try on the machine** (only when the workflow uses machine folders). Run
+   `clane flow try <dir> --on <label>` once and read the result. If the worker is not
+   running or a folder is missing, stop and point the builder at `clane-flow-machine`.
+7. **Publish as a draft.** Run `clane flow publish <dir> --draft --org <slug> --json`.
    Use `--allow-untested` only when the builder agrees the workflow has no sensible recorded
    event yet; the draft is then marked Untested. If it exits 1 with `error.code` `untested`,
    there is no passing report for these exact files, so test again. If it exits 1 with
@@ -53,7 +60,7 @@ CLI, so never try to bypass it.
    merge, check, test and publish again (never `--force` unless they say to replace it). If
    it prints `problems` instead, the server found problems: fix them as in step 4. If it
    exits 3, the builder is not an owner, admin or builder there: stop and say so.
-7. **Summary.** Give the Definitions link (`url`), each automation's address
+8. **Summary.** Give the Definitions link (`url`), each automation's address
    (`automations[].ingress`), the cases passed and the credits spent, and what a person
    should review. End with: "Nothing runs until someone in <Org> switches it on."
 

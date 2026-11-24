@@ -1,0 +1,19 @@
+{
+  "format": 3,
+  "min_engine": "0.1.61",
+  "title": "Invoice Clerk",
+  "line": "Reads supplier invoices, checks totals and your rules, and lists what needs a person.",
+  "kind": "Finance",
+  "agent": "role.yaml",
+  "needs": {
+    "apps": [],
+    "folders": [
+      {
+        "name": "invoices",
+        "label": "a folder for invoices"
+      }
+    ]
+  },
+  "workflows": [],
+  "settings": []
+}

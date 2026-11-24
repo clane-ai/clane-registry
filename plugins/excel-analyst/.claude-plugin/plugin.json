@@ -1,0 +1,8 @@
+{
+  "name": "excel-analyst",
+  "version": "1.0.0",
+  "description": "Cleans, analyses and charts your spreadsheets.",
+  "author": {
+    "name": "Clane"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "format": 3,
+  "min_engine": "0.1.61",
+  "title": "Inbox Assistant",
+  "line": "Sorts your inbox and drafts replies in your tone. Never sends.",
+  "kind": "Customer service",
+  "agent": "role.yaml",
+  "needs": {
+    "apps": [
+      {
+        "anyOf": [
+          "microsoft_outlook",
+          "microsoft_365",
+          "gmail"
+        ],
+        "label": "your email",
+        "optional": false
+      }
+    ],
+    "folders": []
+  },
+  "workflows": [],
+  "settings": []
+}

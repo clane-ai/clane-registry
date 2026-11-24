@@ -1,0 +1,8 @@
+{
+  "name": "research-assistant",
+  "version": "1.0.0",
+  "description": "Looks things up on the web and gives a checked, sourced answer.",
+  "author": {
+    "name": "Clane"
+  }
+}

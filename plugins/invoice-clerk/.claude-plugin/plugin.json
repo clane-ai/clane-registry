@@ -1,0 +1,8 @@
+{
+  "name": "invoice-clerk",
+  "version": "1.0.0",
+  "description": "Reads supplier invoices, checks totals and your rules, and lists what needs a person.",
+  "author": {
+    "name": "Clane"
+  }
+}

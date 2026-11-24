@@ -1,0 +1,19 @@
+{
+  "format": 3,
+  "min_engine": "0.1.61",
+  "title": "Order Desk",
+  "line": "Reads customer orders, scans included, and fills in your order form.",
+  "kind": "Operations",
+  "agent": "role.yaml",
+  "needs": {
+    "apps": [],
+    "folders": [
+      {
+        "name": "orders",
+        "label": "a folder for orders"
+      }
+    ]
+  },
+  "workflows": [],
+  "settings": []
+}

@@ -1,0 +1,8 @@
+{
+  "name": "report-writer",
+  "version": "1.0.0",
+  "description": "Writes long documents section by section and tidies the wording.",
+  "author": {
+    "name": "Clane"
+  }
+}

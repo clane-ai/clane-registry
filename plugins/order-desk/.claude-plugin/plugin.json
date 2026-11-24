@@ -1,0 +1,8 @@
+{
+  "name": "order-desk",
+  "version": "1.0.0",
+  "description": "Reads customer orders, scans included, and fills in your order form.",
+  "author": {
+    "name": "Clane"
+  }
+}

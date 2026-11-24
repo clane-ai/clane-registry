@@ -1,0 +1,14 @@
+{
+  "format": 3,
+  "min_engine": "0.1.61",
+  "title": "Excel Analyst",
+  "line": "Cleans, analyses and charts your spreadsheets.",
+  "kind": "Finance",
+  "agent": "role.yaml",
+  "needs": {
+    "apps": [],
+    "folders": []
+  },
+  "workflows": [],
+  "settings": []
+}

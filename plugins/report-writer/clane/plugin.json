@@ -1,0 +1,14 @@
+{
+  "format": 3,
+  "min_engine": "0.1.61",
+  "title": "Report Writer",
+  "line": "Writes long documents section by section and tidies the wording.",
+  "kind": "Operations",
+  "agent": "role.yaml",
+  "needs": {
+    "apps": [],
+    "folders": []
+  },
+  "workflows": [],
+  "settings": []
+}

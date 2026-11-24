@@ -1,0 +1,14 @@
+{
+  "format": 3,
+  "min_engine": "0.1.61",
+  "title": "Research Assistant",
+  "line": "Looks things up on the web and gives a checked, sourced answer.",
+  "kind": "Sales",
+  "agent": "role.yaml",
+  "needs": {
+    "apps": [],
+    "folders": []
+  },
+  "workflows": [],
+  "settings": []
+}

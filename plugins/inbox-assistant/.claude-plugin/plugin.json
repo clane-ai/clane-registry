@@ -1,0 +1,8 @@
+{
+  "name": "inbox-assistant",
+  "version": "1.0.0",
+  "description": "Sorts your inbox and drafts replies in your tone. Never sends.",
+  "author": {
+    "name": "Clane"
+  }
+}

@@ -57,6 +57,15 @@ under a service account (password in `CLANE_SERVICE_PASSWORD`):
 clane serve --jobs --install-service --service-user .\clane-worker --label <pool> --parallel <n> --folder "<name>=<path>"
 ```
 
+### Make the workflow run on the machine
+
+Machine folders only appear when the workflow runs on the machine. In `workflow.json` set
+`"run_on": { "kind": "label", "label": "<pool>" }` (the worker's `--label`), or in the web app
+open the workflow → Settings → **Runs on** → the machine. A workflow left on the cloud
+(`"run_on": { "kind": "cloud" }` or no `run_on`) offers only cloud folders (Microsoft 365).
+Folder settings for a machine are `"type": "machine_folder"`; ones added while the workflow
+ran in the cloud are `"type": "folder"` and must be removed and added again after the move.
+
 ## 4. Manage it
 
 ```

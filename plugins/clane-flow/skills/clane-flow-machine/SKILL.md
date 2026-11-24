@@ -72,7 +72,16 @@ ran in the cloud are `"type": "folder"` and must be removed and added again afte
 clane service status | start | stop | uninstall
 ```
 
-Changing folders or label means installing again:
+Adding or removing folders needs no reinstall (CLI 0.1.59 or newer); the running worker
+offers the change within a minute:
+
+```
+clane worker folder add <name> "<path>" [--rw]
+clane worker folder remove <name>
+clane worker folder list
+```
+
+Changing the label (or folders on CLI 0.1.58 or older) means installing again:
 
 ```
 clane service stop

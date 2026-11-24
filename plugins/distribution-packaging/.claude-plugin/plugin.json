@@ -1,0 +1,8 @@
+{
+  "name": "distribution-packaging",
+  "version": "1.0.0",
+  "description": "Orders, invoices and the inbox, set up for a distributor.",
+  "author": {
+    "name": "Clane"
+  }
+}

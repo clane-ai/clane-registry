@@ -1,0 +1,15 @@
+{
+  "format": 3,
+  "min_engine": "0.1.62",
+  "title": "Distribution & packaging",
+  "line": "Orders, invoices and the inbox, set up for a distributor.",
+  "pack": {
+    "industry": "Distribution & packaging",
+    "agents": ["order-desk", "invoice-clerk", "inbox-assistant"]
+  },
+  "workflows": [
+    { "slug": "orders-from-email", "title": "Orders from email" },
+    { "slug": "po-order-extractor", "title": "PO to order form" },
+    { "slug": "invoices-by-rules", "title": "Invoices by your rules" }
+  ]
+}

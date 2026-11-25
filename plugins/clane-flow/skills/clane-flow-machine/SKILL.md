@@ -111,6 +111,13 @@ folders (section 4).
 **Runs go to the wrong server**: `clane whoami`, then sign in again with the right
 `--server` (section 2).
 
+**"Clane OCR is not configured", or any "missing CLANE_..._API_KEY"**: OCR and AI steps run on
+the Clane server with Clane's own keys, never with a key on this machine. Do NOT ask the person
+for a vendor key (Mistral, OpenAI, Azure), do NOT `setx` one and do NOT restart the worker for
+it: none of that changes anything. Tell them the Clane server is missing its OCR set-up and
+that their Clane administrator (or Clane support) needs to fix it; re-run the test once they
+say it is fixed.
+
 ## Build, test and run a workflow
 
 ```
